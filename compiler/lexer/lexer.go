@@ -4,7 +4,7 @@ import (
 	"errors"
 	"unicode"
 
-	"github.com/MBlore/AuAu/tokens"
+	"github.com/MBlore/AuAu/token"
 )
 
 type Lexer struct {
@@ -15,7 +15,7 @@ type Lexer struct {
 }
 
 type LexResult struct {
-	Tokens []tokens.Token
+	Tokens []token.Token
 	Errors []error
 }
 
@@ -27,7 +27,7 @@ func NewLexer(src string) *Lexer {
 
 // Lex takes the input source code and produces a list of tokens.
 func (l *Lexer) Lex() LexResult {
-	toks := []tokens.Token{}
+	toks := []token.Token{}
 	errs := []error{}
 
 	for {
@@ -37,13 +37,13 @@ func (l *Lexer) Lex() LexResult {
 			break
 		}
 
-		if tok.Type == tokens.Illegal {
+		if tok.Type == token.Illegal {
 			// Illegal chars hard stop lexing.
 			errs = append(errs, errors.New("illegal character: "+tok.Literal))
 			break
 		}
 
-		if tok.Type == tokens.EOF {
+		if tok.Type == token.EOF {
 			break
 		}
 
@@ -57,7 +57,7 @@ func (l *Lexer) Lex() LexResult {
 }
 
 // nextToken gets the next token from the source.
-func (l *Lexer) nextToken() (tokens.Token, error) {
+func (l *Lexer) nextToken() (token.Token, error) {
 	// Skip whitespace.
 	l.skipWhitespace()
 
@@ -65,7 +65,7 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 
 	// End of file.
 	if ch == 0 {
-		return tokens.Token{Type: tokens.EOF}, nil
+		return token.Token{Type: token.EOF}, nil
 	}
 
 	startLine := l.line
@@ -76,10 +76,10 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 		// String literal.
 		decoded, err := l.readString()
 		if err != nil {
-			return tokens.Token{}, err
+			return token.Token{}, err
 		}
 
-		return tokens.Token{Type: tokens.String, Literal: string(decoded), Bytes: decoded, Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.String, Literal: string(decoded), Bytes: decoded, Line: startLine, Col: startCol}, nil
 	default:
 		// Default scan for identifiers and keywords.
 		if isIdentStart(ch) {
@@ -91,17 +91,17 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 			ident := string(l.src[start:l.pos])
 
 			// Idents can turn into keywords, so check if this ident is a keyword.
-			if kwType := tokens.LookupKeyword(ident); kwType != tokens.Ident {
-				return tokens.Token{Type: kwType, Literal: ident, Line: startLine, Col: startCol}, nil
+			if kwType := token.LookupKeyword(ident); kwType != token.Ident {
+				return token.Token{Type: kwType, Literal: ident, Line: startLine, Col: startCol}, nil
 			}
 
 			// Its a real identifier.
-			return tokens.Token{Type: tokens.Ident, Literal: ident, Line: startLine, Col: startCol}, nil
+			return token.Token{Type: token.Ident, Literal: ident, Line: startLine, Col: startCol}, nil
 		}
 
 		// If we get here, its an illegal character.
 		l.advance()
-		return tokens.Token{Type: tokens.Illegal, Literal: string(ch), Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.Illegal, Literal: string(ch), Line: startLine, Col: startCol}, nil
 	}
 }
 

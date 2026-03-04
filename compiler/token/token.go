@@ -1,4 +1,4 @@
-package tokens
+package token
 
 // TokenType identifies the lexical class for one token.
 type TokenType string

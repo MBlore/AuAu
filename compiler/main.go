@@ -5,24 +5,40 @@ import (
 	"os"
 
 	"github.com/MBlore/AuAu/lexer"
+	"github.com/MBlore/AuAu/parser"
 )
 
-func main() {
+const (
+	ansiReset     = "\x1b[0m"
+	ansiLightBlue = "\x1b[94m"
+	ansiGreen     = "\x1b[32m"
+	ansiRed       = "\x1b[31m"
+)
 
-	if len(os.Args) < 2 {
+// colorize wraps text with one ANSI color code and a trailing reset code.
+func colorize(text, ansiColor string) string {
+	return ansiColor + text + ansiReset
+}
+
+func printBanner() {
+	fmt.Println("========================================================================")
+	fmt.Println(colorize(" AuAu Compiler v0.1.0", ansiLightBlue))
+	fmt.Println(" ...because even high witches need a compiler.")
+	fmt.Println("========================================================================")
+}
+
+func main() {
+	printBanner()
+
+	// Only support "build" for now.
+	if len(os.Args) < 3 {
 		fmt.Println("Usage: auau build <filename>")
 		return
 	}
 
-	// Only support "build" for now.
 	command := os.Args[1]
 	if command != "build" {
 		fmt.Printf("Unknown command: %s\n", command)
-		return
-	}
-
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: auau build <filename>")
 		return
 	}
 
@@ -43,8 +59,30 @@ func main() {
 		return
 	}
 
+	// Step one: Lex the source code into tokens.
 	lexer := lexer.NewLexer(string(source))
 	lexResult := lexer.Lex()
 
-	fmt.Printf("Lexed %d tokens.\n", len(lexResult.Tokens))
+	// Report lexing errors.
+	if len(lexResult.Errors) > 0 {
+		for _, err := range lexResult.Errors {
+			fmt.Println(colorize("error ", ansiRed) + err.Error())
+		}
+
+		return
+	}
+
+	// Step two: Parse the tokens into an AST.
+	parser := parser.NewParser(filename, lexResult.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) > 0 {
+		for _, err := range pr.Errors {
+			fmt.Println(colorize("error ", ansiRed) + err.Error())
+		}
+
+		return
+	}
+
+	fmt.Println(colorize("Build successful.", ansiGreen))
 }

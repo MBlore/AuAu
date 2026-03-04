@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MBlore/AuAu/tokens"
+	"github.com/MBlore/AuAu/token"
 )
 
 func TestLexPackageName(t *testing.T) {
@@ -17,11 +17,11 @@ func TestLexPackageName(t *testing.T) {
 		t.Errorf("Expected 2 tokens, got %d", len(result.Tokens))
 	}
 
-	if result.Tokens[0].Type != tokens.Package {
-		t.Errorf("Expected token type %s, got %s", tokens.Package, result.Tokens[0].Type)
+	if result.Tokens[0].Type != token.Package {
+		t.Errorf("Expected token type %s, got %s", token.Package, result.Tokens[0].Type)
 	}
-	if result.Tokens[1].Type != tokens.String {
-		t.Errorf("Expected token type %s, got %s", tokens.String, result.Tokens[1].Type)
+	if result.Tokens[1].Type != token.String {
+		t.Errorf("Expected token type %s, got %s", token.String, result.Tokens[1].Type)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestStringTokensHaveBytes(t *testing.T) {
 		t.Errorf("Expected 2 tokens, got %d", len(result.Tokens))
 	}
 
-	if result.Tokens[1].Type != tokens.String || result.Tokens[1].Bytes == nil {
+	if result.Tokens[1].Type != token.String || result.Tokens[1].Bytes == nil {
 		t.Errorf("Expected string token to have bytes.")
 	}
 }
@@ -138,7 +138,7 @@ func TestLexIdent(t *testing.T) {
 		t.Errorf("Expected 2 tokens, got %d.", len(result.Errors))
 	}
 
-	if result.Tokens[0].Type != tokens.Ident {
+	if result.Tokens[0].Type != token.Ident {
 		t.Errorf("Expected ident token, got '%s'.", string(result.Tokens[0].Type))
 	}
 }
