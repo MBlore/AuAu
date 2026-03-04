@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MBlore/AuAu/backend"
 	"github.com/MBlore/AuAu/lexer"
+	"github.com/MBlore/AuAu/lowering"
 	"github.com/MBlore/AuAu/parser"
 )
 
@@ -55,7 +57,7 @@ func Run(args []string) {
 		return
 	}
 
-	// Step one: Lex the source code into tokens.
+	// Step 1: Lex the source code into tokens.
 	lexer := lexer.NewLexer(string(source))
 	lexResult := lexer.Lex()
 
@@ -68,7 +70,7 @@ func Run(args []string) {
 		return
 	}
 
-	// Step two: Parse the tokens into an AST.
+	// Step 2: Parse the tokens into an AST.
 	parser := parser.NewParser(filename, lexResult.Tokens)
 	pr := parser.Parse()
 
@@ -77,6 +79,20 @@ func Run(args []string) {
 			fmt.Println(colorize("error ", ansiRed) + err.Error())
 		}
 
+		return
+	}
+
+	// Step 3: Lower the AST to IR.
+	irProgram, err := lowering.LowerToIR(pr.SourceFile)
+	if err != nil {
+		fmt.Printf("Error lowering to IR: %s\n", err)
+		return
+	}
+
+	// Step 4: Compile the IR to assembly.
+	err = backend.CompileToASM("out.asm", irProgram)
+	if err != nil {
+		fmt.Printf("Error compiling to assembly: %s\n", err)
 		return
 	}
 

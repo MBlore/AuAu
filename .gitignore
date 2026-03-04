@@ -1,1 +1,6 @@
 *.exe
+*.obj
+*.dll
+*.log
+*.tmp
+*.asm
