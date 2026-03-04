@@ -9,7 +9,7 @@ import (
 
 type Lexer struct {
 	src  []rune
-	pos  int // current position in input (points to current char)
+	pos  int
 	col  int
 	line int
 }
@@ -59,12 +59,7 @@ func (l *Lexer) Lex() LexResult {
 // nextToken gets the next token from the source.
 func (l *Lexer) nextToken() (tokens.Token, error) {
 	// Skip whitespace.
-	err := l.skipWhitespace()
-	if err != nil {
-		// Skipping whitespace can fail if we encounter an unterminated block comment.
-		// In that case, we return EOF to stop lexing.
-		return tokens.Token{Type: tokens.EOF}, nil
-	}
+	l.skipWhitespace()
 
 	ch := l.peek()
 
@@ -79,7 +74,6 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 	switch ch {
 	case '"':
 		// String literal.
-
 		decoded, err := l.readString()
 		if err != nil {
 			return tokens.Token{}, err
@@ -134,11 +128,11 @@ func (l *Lexer) readString() ([]byte, error) {
 }
 
 // skipWhitespace advances the position until it encounters a non-whitespace character.
-func (l *Lexer) skipWhitespace() error {
+func (l *Lexer) skipWhitespace() {
 	for {
 		ch := l.peek()
 		if ch == 0 {
-			return nil
+			return
 		}
 
 		// Skip comment lines.
@@ -152,6 +146,7 @@ func (l *Lexer) skipWhitespace() error {
 				}
 				l.advance()
 			}
+
 			// Reset to top of loop to check for more whitespace/comments after this line comment.
 			continue
 		}
@@ -165,7 +160,8 @@ func (l *Lexer) skipWhitespace() error {
 			for {
 				ch = l.peek()
 				if ch == 0 {
-					return errors.New("unterminated block comment")
+					// Unclose comment block at end of file, thats fine.
+					return
 				}
 
 				if ch == '*' && l.peekAhead(1) == '/' {
@@ -187,8 +183,6 @@ func (l *Lexer) skipWhitespace() error {
 			break
 		}
 	}
-
-	return nil
 }
 
 // isIdentStart checks if the given character can start an identifier (letter or underscore).
