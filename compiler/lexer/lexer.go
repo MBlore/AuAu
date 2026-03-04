@@ -79,7 +79,12 @@ func (l *Lexer) nextToken() (token.Token, error) {
 			return token.Token{}, err
 		}
 
-		return token.Token{Type: token.String, Literal: string(decoded), Bytes: decoded, Line: startLine, Col: startCol}, nil
+		return token.Token{
+			Type:    token.String,
+			Literal: string(decoded),
+			Bytes:   decoded,
+			Line:    startLine,
+			Col:     startCol}, nil
 	default:
 		// Default scan for identifiers and keywords.
 		if isIdentStart(ch) {
@@ -108,7 +113,7 @@ func (l *Lexer) nextToken() (token.Token, error) {
 // readString reads a string literal from the input, starting after the opening quote.
 func (l *Lexer) readString() ([]byte, error) {
 	l.advance() // skip opening quote
-	out := make([]byte, 32)
+	out := make([]byte, 0, 32)
 	for {
 		ch := l.peek()
 		if ch == 0 {
@@ -123,6 +128,8 @@ func (l *Lexer) readString() ([]byte, error) {
 			l.advance() // skip closing quote
 			return out, nil
 		}
+
+		out = append(out, byte(ch))
 		l.advance()
 	}
 }
