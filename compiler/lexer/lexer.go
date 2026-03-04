@@ -8,8 +8,10 @@ import (
 )
 
 type Lexer struct {
-	src []rune
-	pos int // current position in input (points to current char)
+	src  []rune
+	pos  int // current position in input (points to current char)
+	col  int
+	line int
 }
 
 type LexResult struct {
@@ -71,15 +73,19 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 		return tokens.Token{Type: tokens.EOF}, nil
 	}
 
+	startLine := l.line
+	startCol := l.col
+
 	switch ch {
 	case '"':
 		// String literal.
+
 		decoded, err := l.readString()
 		if err != nil {
 			return tokens.Token{}, err
 		}
 
-		return tokens.Token{Type: tokens.String, Literal: string(decoded), Bytes: decoded}, nil
+		return tokens.Token{Type: tokens.String, Literal: string(decoded), Bytes: decoded, Line: startLine, Col: startCol}, nil
 	default:
 		// Default scan for identifiers and keywords.
 		if isIdentStart(ch) {
@@ -92,16 +98,16 @@ func (l *Lexer) nextToken() (tokens.Token, error) {
 
 			// Idents can turn into keywords, so check if this ident is a keyword.
 			if kwType := tokens.LookupKeyword(ident); kwType != tokens.Ident {
-				return tokens.Token{Type: kwType, Literal: ident}, nil
+				return tokens.Token{Type: kwType, Literal: ident, Line: startLine, Col: startCol}, nil
 			}
 
 			// Its a real identifier.
-			return tokens.Token{Type: tokens.Ident, Literal: ident}, nil
+			return tokens.Token{Type: tokens.Ident, Literal: ident, Line: startLine, Col: startCol}, nil
 		}
 
 		// If we get here, its an illegal character.
 		l.advance()
-		return tokens.Token{Type: tokens.Illegal, Literal: string(ch)}, nil
+		return tokens.Token{Type: tokens.Illegal, Literal: string(ch), Line: startLine, Col: startCol}, nil
 	}
 }
 
@@ -215,6 +221,14 @@ func (l *Lexer) peekAhead(cnt int) rune {
 // advance advances the read position by 1 rune.
 func (l *Lexer) advance() {
 	if l.pos < len(l.src) {
+		// Update line and column tracking.
+		if l.src[l.pos] == '\n' {
+			l.line++
+			l.col = 0
+		} else {
+			l.col++
+		}
+
 		l.pos++
 	}
 }
