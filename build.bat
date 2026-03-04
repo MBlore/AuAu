@@ -7,6 +7,13 @@ if not exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxilia
     exit /b 1
 )
 
+REM Check if NASM is installed and in the PATH.
+where nasm >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo NASM not found. Please ensure NASM is installed and in the PATH.
+    exit /b 1
+)
+
 REM Initialize the Visual Studio environment variables for 64-bit compilation.
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
 
