@@ -117,5 +117,6 @@ func TypeToString(t *TypeRef) string {
 	if t == nil {
 		return "nil"
 	}
+
 	return TypeKindToString(t.Kind)
 }

@@ -41,7 +41,7 @@ func (p *AstPrinter) printFuncDecl(f *FuncDecl) {
 		}
 	}
 
-	p.buff.WriteString(")\n")
+	fmt.Fprintf(&p.buff, ") return=%s public=%v\n", TypeKindToString(f.ReturnType.Kind), f.IsPublic)
 	p.line++
 }
 

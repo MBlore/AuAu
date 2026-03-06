@@ -2,3 +2,6 @@ package "main"
 
 void main() {
 }
+
+int Test() {
+}

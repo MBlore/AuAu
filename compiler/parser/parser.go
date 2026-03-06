@@ -141,6 +141,7 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		Name:       funcName.Literal,
 		ReturnType: retType,
 		Params:     params,
+		IsPublic:   funcName.Literal[0] >= 'A' && funcName.Literal[0] <= 'Z',
 	}, nil
 }
 
@@ -191,7 +192,7 @@ func (p *Parser) parseType() (*ast.TypeRef, error) {
 	case token.Void:
 		p.advance()
 		return ast.TypeVoidRef, nil
-	case token.Int:
+	case token.IntKw:
 		p.advance()
 		return ast.TypeIntRef, nil
 	default:

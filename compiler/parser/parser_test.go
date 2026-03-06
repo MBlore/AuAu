@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/token"
 )
@@ -110,5 +111,46 @@ func TestReadOneFunc(t *testing.T) {
 	mainFunc := pr.File.Functions[0]
 	if mainFunc.Name != "main" {
 		t.Errorf("Expected function name 'main', got '%s'", mainFunc.Name)
+	}
+}
+
+func TestReadTwoFuncs(t *testing.T) {
+	input := `package "main"
+
+	void main() {
+	}
+
+	int Foo() {
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.File.Functions) != 2 {
+		t.Errorf("Expected 2 functions, got %d", len(pr.File.Functions))
+	}
+
+	mainFunc := pr.File.Functions[0]
+	if mainFunc.Name != "main" {
+		t.Errorf("Expected first function name 'main', got '%s'", mainFunc.Name)
+	}
+	if mainFunc.IsPublic != false {
+		t.Errorf("Expected 'main' function to be private, got IsPublic=%v", mainFunc.IsPublic)
+	}
+	if mainFunc.ReturnType.Kind != ast.TypeVoid {
+		t.Errorf("Expected 'main' function return type to be 'void', got %v", mainFunc.ReturnType.Kind)
+	}
+
+	fooFunc := pr.File.Functions[1]
+	if fooFunc.Name != "Foo" {
+		t.Errorf("Expected second function name 'Foo', got '%s'", fooFunc.Name)
+	}
+	if fooFunc.IsPublic != true {
+		t.Errorf("Expected 'Foo' function to be public, got IsPublic=%v", fooFunc.IsPublic)
+	}
+	if fooFunc.ReturnType.Kind != ast.TypeInt {
+		t.Errorf("Expected 'Foo' function return type to be 'int', got %v", fooFunc.ReturnType.Kind)
 	}
 }
