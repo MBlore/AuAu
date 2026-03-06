@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/backend"
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/lowering"
@@ -58,8 +59,8 @@ func Run(args []string) {
 	}
 
 	// Step 1: Lex the source code into tokens.
-	lexer := lexer.NewLexer(string(source))
-	lexResult := lexer.Lex()
+	lx := lexer.NewLexer(string(source))
+	lexResult := lx.Lex()
 
 	// Report lexing errors.
 	if len(lexResult.Errors) > 0 {
@@ -67,6 +68,16 @@ func Run(args []string) {
 			fmt.Println(colorize("error ", ansiRed) + err.Error())
 		}
 
+		return
+	}
+
+	// Print the tokens.
+	tokPrinter := lexer.NewTokenPrinter(lexResult.Tokens)
+	tokStr := tokPrinter.Print()
+
+	err = os.WriteFile("tokens.txt", []byte(tokStr), 0644)
+	if err != nil {
+		fmt.Printf("Error writing tokens to file: %s\n", err)
 		return
 	}
 
@@ -82,8 +93,18 @@ func Run(args []string) {
 		return
 	}
 
+	// Print the AST to file.
+	astPrint := ast.NewAstPrinter(pr.File)
+	astStr := astPrint.Print()
+
+	err = os.WriteFile("ast.txt", []byte(astStr), 0644)
+	if err != nil {
+		fmt.Printf("Error writing AST to file: %s\n", err)
+		return
+	}
+
 	// Step 3: Lower the AST to IR.
-	irProgram, err := lowering.LowerToIR(pr.SourceFile)
+	irProgram, err := lowering.LowerToIR(pr.File)
 	if err != nil {
 		fmt.Printf("Error lowering to IR: %s\n", err)
 		return

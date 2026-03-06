@@ -61,6 +61,15 @@ float64
 float (maps to float64)
 ```
 
+## User Types
+
+```
+struct Person {
+    string name
+    float height
+}
+```
+
 ## Control Flow
 For Loops:
 ```

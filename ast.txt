@@ -1,0 +1,2 @@
+0000: package main
+0001: func main()

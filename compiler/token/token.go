@@ -108,6 +108,10 @@ func LookupKeyword(ident string) TokenType {
 	switch ident {
 	case "package":
 		return Package
+	case "void":
+		return Void
+	case "int":
+		return IntKw
 	}
 
 	return Ident

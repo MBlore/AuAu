@@ -72,6 +72,18 @@ func (l *Lexer) nextToken() (token.Token, error) {
 	startCol := l.col
 
 	switch ch {
+	case '(':
+		l.advance()
+		return token.Token{Type: token.LParen, Literal: "(", Line: startLine, Col: startCol}, nil
+	case ')':
+		l.advance()
+		return token.Token{Type: token.RParen, Literal: ")", Line: startLine, Col: startCol}, nil
+	case '{':
+		l.advance()
+		return token.Token{Type: token.LBrace, Literal: "{", Line: startLine, Col: startCol}, nil
+	case '}':
+		l.advance()
+		return token.Token{Type: token.RBrace, Literal: "}", Line: startLine, Col: startCol}, nil
 	case '"':
 		// String literal.
 		decoded, err := l.readString()

@@ -1,1 +1,4 @@
 package "main"
+
+void main() {
+}

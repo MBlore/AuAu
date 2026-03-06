@@ -154,3 +154,17 @@ func TestPeekAheadCanReturnZero(t *testing.T) {
 		t.Errorf("Expected 0, got %d.", result)
 	}
 }
+
+func TestBasicProgram(t *testing.T) {
+	input := `package "main"
+
+	void main() {
+	}`
+
+	lexer := NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Tokens) != 8 {
+		t.Errorf("Expected 8 tokens, got %d.", len(result.Tokens))
+	}
+}

@@ -44,7 +44,12 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
-cl /nologo "out.obj" /Fe:"out.exe" /link /subsystem:console /entry:mainCRTStartup ucrt.lib vcruntime.lib msvcrt.lib legacy_stdio_definitions.lib
+link /nologo out.obj ^
+    /SUBSYSTEM:CONSOLE ^
+    /ENTRY:mainCRTStartup ^
+    ucrt.lib vcruntime.lib msvcrt.lib legacy_stdio_definitions.lib ^
+    /OUT:out.exe
+
 if %ERRORLEVEL% neq 0 (
     echo Linking failed.
     exit /b %ERRORLEVEL%

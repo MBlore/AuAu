@@ -11,8 +11,8 @@ import (
 )
 
 type ParseResult struct {
-	Errors     []error
-	SourceFile *ast.SourceFile
+	Errors []error
+	File   *ast.File
 }
 
 type Parser struct {
@@ -44,13 +44,27 @@ func (p *Parser) Parse() ParseResult {
 		return ParseResult{Errors: p.errors}
 	}
 
-	// TODO: Parse functions.
+	funcs := []*ast.FuncDecl{}
 
-	sourceFile := ast.SourceFile{
-		PackageName: tokPackageName.Literal,
+	for p.peek().Type != token.EOF {
+		tok := p.peek()
+
+		// We're only expecting function declarations at the moment.
+		f, err := p.parseFuncDecl()
+		if err != nil {
+			p.addError(tok, err)
+			return ParseResult{Errors: p.errors}
+		}
+
+		funcs = append(funcs, f)
 	}
 
-	return ParseResult{SourceFile: &sourceFile, Errors: p.errors}
+	sourceFile := ast.File{
+		PackageName: tokPackageName.Literal,
+		Functions:   funcs,
+	}
+
+	return ParseResult{File: &sourceFile, Errors: p.errors}
 }
 
 // addError adds an error to the parsers error list with file, line, and column information
@@ -95,4 +109,92 @@ func (p *Parser) peekAhead(offset int) token.Token {
 	}
 
 	return p.tokens[p.pos+offset]
+}
+
+func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
+	retType, err := p.parseType()
+	if err != nil {
+		return nil, errors.New("expected return type for function declaration")
+	}
+
+	funcName, err := p.expect(token.Ident)
+	if err != nil {
+		return nil, errors.New("expected function name after return type")
+	}
+
+	params, err := p.parseParamList()
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip the function body for now, we just want to validate the function declaration syntax.
+	_, err = p.expect(token.LBrace)
+	if err != nil {
+		return nil, errors.New("expected '{' to start function body")
+	}
+	_, err = p.expect(token.RBrace)
+	if err != nil {
+		return nil, errors.New("expected '}' to end function body")
+	}
+
+	return &ast.FuncDecl{
+		Name:       funcName.Literal,
+		ReturnType: retType,
+		Params:     params,
+	}, nil
+}
+
+func (p *Parser) parseParamList() ([]ast.Param, error) {
+	// Expect an opening parenthesis for the parameter list.
+	_, err := p.expect(token.LParen)
+	if err != nil {
+		return nil, errors.New("expected '(' to start parameter list")
+	}
+
+	params := []ast.Param{}
+
+	// Parse parameters until we reach the closing parenthesis.
+	for p.peek().Type != token.RParen {
+		paramType, err := p.parseType()
+		if err != nil {
+			return nil, errors.New("expected type for parameter")
+		}
+
+		paramName, err := p.expect(token.Ident)
+		if err != nil {
+			return nil, errors.New("expected parameter name after type")
+		}
+
+		params = append(params, ast.Param{
+			Name: paramName.Literal,
+			Type: paramType,
+		})
+
+		// Next token must be comma or closing parenthesis.
+		if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
+			return nil, errors.New("expected ',' or ')' after parameter")
+		}
+
+		p.advance()
+	}
+
+	// Skip the closing parenthesis.
+	p.advance()
+
+	return params, nil
+}
+
+// parseType parses a type from the current token position. It returns an error if the token is not a valid type.
+func (p *Parser) parseType() (*ast.TypeRef, error) {
+	tok := p.peek()
+	switch tok.Type {
+	case token.Void:
+		p.advance()
+		return ast.TypeVoidRef, nil
+	case token.Int:
+		p.advance()
+		return ast.TypeIntRef, nil
+	default:
+		return nil, errors.New("unexpected token, expecting type")
+	}
 }

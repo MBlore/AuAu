@@ -19,12 +19,12 @@ func TestSuccessParse(t *testing.T) {
 		t.Errorf("Expected no errors, got %d: %v", len(pr.Errors), pr.Errors)
 	}
 
-	if pr.SourceFile == nil {
+	if pr.File == nil {
 		t.Errorf("Expected a SourceFile, got nil")
 	}
 
-	if pr.SourceFile.PackageName != "main" {
-		t.Errorf("Expected package name 'main', got '%s'", pr.SourceFile.PackageName)
+	if pr.File.PackageName != "main" {
+		t.Errorf("Expected package name 'main', got '%s'", pr.File.PackageName)
 	}
 }
 
@@ -76,5 +76,39 @@ func TestPeakReturnsEOF(t *testing.T) {
 
 	if parser.peek().Type != token.EOF {
 		t.Errorf("Expected peek() at end of tokens to return EOF, got %v", parser.peek())
+	}
+}
+
+func TestReadOneFunc(t *testing.T) {
+	input := `package "main"
+
+	void main() {
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	if pr.File == nil {
+		t.Errorf("Expected a File, got nil")
+	}
+
+	if len(pr.File.Functions) != 1 {
+		t.Errorf("Expected 1 function, got %d", len(pr.File.Functions))
+	}
+
+	mainFunc := pr.File.Functions[0]
+	if mainFunc.Name != "main" {
+		t.Errorf("Expected function name 'main', got '%s'", mainFunc.Name)
 	}
 }
