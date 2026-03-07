@@ -57,7 +57,7 @@ func InstrToString(instr *Instr) string {
 		return fmt.Sprintf("%s = alloc",
 			printValue(instr.Dest),
 		)
-	case OpRet:
+	case OpReturn:
 		if len(instr.Args) == 0 {
 			return "ret"
 		}

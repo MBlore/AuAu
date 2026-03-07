@@ -34,7 +34,7 @@ const (
 	OpCmp
 	OpBranch
 	OpJump
-	OpRet
+	OpReturn
 	OpAlloc
 )
 

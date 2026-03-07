@@ -109,7 +109,7 @@ func (b *Builder) Return(vals ...IRValue) {
 	}
 
 	instr := &Instr{
-		Op:   OpRet,
+		Op:   OpReturn,
 		Args: vals,
 	}
 

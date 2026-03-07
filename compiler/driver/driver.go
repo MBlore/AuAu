@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/MBlore/AuAu/ast"
-	"github.com/MBlore/AuAu/backend"
+	"github.com/MBlore/AuAu/backend/nasm/x64"
 	"github.com/MBlore/AuAu/ir"
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/parser"
@@ -117,7 +117,7 @@ func Run(args []string) {
 	}
 
 	// Step 4: Compile the IR to assembly.
-	err = backend.CompileToASM("out.asm", irProgram)
+	err = x64.Compile("out.asm", irProgram)
 	if err != nil {
 		fmt.Printf("Error compiling to assembly: %s\n", err)
 		return
