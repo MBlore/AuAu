@@ -72,6 +72,21 @@ func (l *Lexer) nextToken() (token.Token, error) {
 	startCol := l.col
 
 	switch ch {
+	case '+':
+		l.advance()
+		return token.Token{Type: token.Plus, Literal: "+", Line: startLine, Col: startCol}, nil
+	case '-':
+		l.advance()
+		return token.Token{Type: token.Minus, Literal: "-", Line: startLine, Col: startCol}, nil
+	case '*':
+		l.advance()
+		return token.Token{Type: token.Asterisk, Literal: "*", Line: startLine, Col: startCol}, nil
+	case '/':
+		l.advance()
+		return token.Token{Type: token.Slash, Literal: "/", Line: startLine, Col: startCol}, nil
+	case '=':
+		l.advance()
+		return token.Token{Type: token.Equals, Literal: "=", Line: startLine, Col: startCol}, nil
 	case '(':
 		l.advance()
 		return token.Token{Type: token.LParen, Literal: "(", Line: startLine, Col: startCol}, nil
@@ -98,6 +113,30 @@ func (l *Lexer) nextToken() (token.Token, error) {
 			Line:    startLine,
 			Col:     startCol}, nil
 	default:
+		// Numbers.
+		if unicode.IsDigit(ch) {
+			savedIdx := l.pos
+
+			// Handle 0x, 0c and 0b prefixes for hex, octal and binary literals.
+			if ch == '0' {
+				if l.peekAhead(1) == 'x' || l.peekAhead(1) == 'X' ||
+					l.peekAhead(1) == 'c' || l.peekAhead(1) == 'C' ||
+					l.peekAhead(1) == 'b' || l.peekAhead(1) == 'B' {
+					l.advance()
+					l.advance()
+				}
+			}
+
+			// Fast forward until we hit a non-digit character.
+			for unicode.IsDigit(l.peek()) {
+				l.advance()
+			}
+
+			// Build the number token where the literal will include the base prefix.
+			// The parser will handle parsing of the base prefix.
+			return token.Token{Type: token.Number, Literal: string(l.src[savedIdx:l.pos]), Line: startLine, Col: startCol}, nil
+		}
+
 		// Default scan for identifiers and keywords.
 		if isIdentStart(ch) {
 			start := l.pos

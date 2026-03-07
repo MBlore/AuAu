@@ -43,6 +43,46 @@ func (p *AstPrinter) printFuncDecl(f *FuncDecl) {
 
 	fmt.Fprintf(&p.buff, ") return=%s public=%v\n", TypeKindToString(f.ReturnType.Kind), f.IsPublic)
 	p.line++
+
+	p.printBlock(f.Body)
+}
+
+func (p *AstPrinter) printBlock(block *BlockStmt) {
+	p.indentLevel++
+	for _, stmt := range block.Stmts {
+		p.printStmt(stmt)
+	}
+	p.indentLevel--
+}
+
+func (p *AstPrinter) printStmt(stmt Stmt) {
+	switch s := stmt.(type) {
+	case *VarDeclStmt:
+		if s.Init != nil {
+			fmt.Fprintf(&p.buff, "%svar %s %s =", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+			p.printExpr(s.Init)
+			p.buff.WriteString("\n")
+		} else {
+			fmt.Fprintf(&p.buff, "%svar %s %s\n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+		}
+
+		p.line++
+	}
+}
+
+func (p *AstPrinter) printExpr(expr Expr) {
+	switch e := expr.(type) {
+	case *IdentExpr:
+		p.buff.WriteString(" " + e.Name)
+	case *IntLiteralExpr:
+		p.buff.WriteString(" " + fmt.Sprintf("%d", e.Value))
+	case *BinaryExpr:
+		p.buff.WriteString(" (")
+		p.printExpr(e.Left)
+		p.buff.WriteString(" " + string(e.Op) + " ")
+		p.printExpr(e.Right)
+		p.buff.WriteString(")")
+	}
 }
 
 func (p *AstPrinter) prefix() string {

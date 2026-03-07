@@ -1,3 +1,8 @@
 0000: package main
 0001: func main() return=void public=false
-0002: func Test() return=int public=true
+0002:   var a int = 123
+0003:   var b int = foo
+0004:   var c int = 123
+0005:   var d int = foo
+0006:   var e int = 42
+0007: func Test() return=int public=true

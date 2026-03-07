@@ -80,12 +80,12 @@ type Expr interface {
 	isExpr()
 }
 
-type IntLiteral struct {
+type IntLiteralExpr struct {
 	NodeMeta
 	Value int64
 }
 
-func (*IntLiteral) isExpr() {}
+func (*IntLiteralExpr) isExpr() {}
 
 type IdentExpr struct {
 	NodeMeta

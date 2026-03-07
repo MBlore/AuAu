@@ -1,6 +1,11 @@
 package "main"
 
 void main() {
+    int a = 123
+    int b = foo
+    int c = (123)
+    int d = (foo)
+    int e = ((42))
 }
 
 int Test() {

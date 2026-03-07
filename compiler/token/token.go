@@ -11,7 +11,7 @@ const (
 	Import  TokenType = "IMPORT"
 
 	// Literals
-	Int    TokenType = "INT"
+	Number TokenType = "NUMBER"
 	String TokenType = "STRING"
 	Float  TokenType = "FLOAT"
 	Rune   TokenType = "RUNE"
@@ -81,7 +81,7 @@ const (
 	RParen    TokenType = ")"
 	Comma     TokenType = ","
 	Dot       TokenType = "."
-	Assign    TokenType = "="
+	Equals    TokenType = "="
 	Semicolon TokenType = ";"
 	Plus      TokenType = "+"
 	Minus     TokenType = "-"

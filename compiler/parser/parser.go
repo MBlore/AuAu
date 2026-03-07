@@ -87,10 +87,12 @@ func (p *Parser) expect(tt token.TokenType) (token.Token, error) {
 }
 
 // advance moves the token index forward by one.
-func (p *Parser) advance() {
+func (p *Parser) advance() token.Token {
 	if p.pos < len(p.tokens) {
 		p.pos++
 	}
+
+	return p.peek()
 }
 
 // peek returns the token at the current parsing position without consuming it.
@@ -127,11 +129,23 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		return nil, err
 	}
 
-	// Skip the function body for now, we just want to validate the function declaration syntax.
 	_, err = p.expect(token.LBrace)
 	if err != nil {
 		return nil, errors.New("expected '{' to start function body")
 	}
+
+	// Parse statements.
+	stmts := []ast.Stmt{}
+
+	for p.peek().Type != token.RBrace {
+		st, err := p.parseStatement()
+		if err != nil {
+			return nil, err
+		}
+
+		stmts = append(stmts, st)
+	}
+
 	_, err = p.expect(token.RBrace)
 	if err != nil {
 		return nil, errors.New("expected '}' to end function body")
@@ -141,8 +155,42 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		Name:       funcName.Literal,
 		ReturnType: retType,
 		Params:     params,
+		Body:       &ast.BlockStmt{Stmts: stmts},
 		IsPublic:   funcName.Literal[0] >= 'A' && funcName.Literal[0] <= 'Z',
 	}, nil
+}
+
+func (p *Parser) parseStatement() (ast.Stmt, error) {
+	tok := p.peek()
+	switch tok.Type {
+	case token.IntKw:
+		p.advance()
+		// Expect an identifier for the variable name.
+		varName, err := p.expect(token.Ident)
+		if err != nil {
+			return nil, errors.New("expected variable name after type in variable declaration")
+		}
+
+		// Parse the expression initializer if theres an equals sign after the variable name.
+		var initExpr ast.Expr
+		if p.peek().Type == token.Equals {
+			p.advance()
+
+			var err error
+			initExpr, err = p.parseExpr()
+			if err != nil {
+				return nil, errors.New("expected initializer expression after '=' in variable declaration")
+			}
+		}
+
+		return &ast.VarDeclStmt{
+			Name: varName.Literal,
+			Type: ast.TypeIntRef,
+			Init: initExpr,
+		}, nil
+	default:
+		return nil, errors.New("unexpected token, expected statement")
+	}
 }
 
 func (p *Parser) parseParamList() ([]ast.Param, error) {

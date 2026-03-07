@@ -159,12 +159,13 @@ func TestBasicProgram(t *testing.T) {
 	input := `package "main"
 
 	void main() {
+		int a = 1 + 2 * 3 - 1 / 2 + (1 + 1)
 	}`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
 
-	if len(result.Tokens) != 8 {
-		t.Errorf("Expected 8 tokens, got %d.", len(result.Tokens))
+	if len(result.Tokens) != 26 {
+		t.Errorf("Expected 26 tokens, got %d.", len(result.Tokens))
 	}
 }
