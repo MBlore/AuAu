@@ -7,6 +7,5 @@ import (
 
 // LowerToIR lowers an AST graph to IR instructions.
 func LowerToIR(p *ast.File) (*ir.IRProgram, error) {
-	out := &ir.IRProgram{}
-	return out, nil
+	return ir.BuildFile(p)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/lowering"
 	"github.com/MBlore/AuAu/parser"
+	"github.com/MBlore/AuAu/token"
 )
 
 const (
@@ -72,8 +73,7 @@ func Run(args []string) {
 	}
 
 	// Print the tokens.
-	tokPrinter := lexer.NewTokenPrinter(lexResult.Tokens)
-	tokStr := tokPrinter.Print()
+	tokStr := token.PrintTokens(lexResult.Tokens)
 
 	err = os.WriteFile("tokens.txt", []byte(tokStr), 0644)
 	if err != nil {
@@ -107,6 +107,12 @@ func Run(args []string) {
 	irProgram, err := lowering.LowerToIR(pr.File)
 	if err != nil {
 		fmt.Printf("Error lowering to IR: %s\n", err)
+		return
+	}
+
+	err = os.WriteFile("ir.txt", []byte(irProgram.String()), 0644)
+	if err != nil {
+		fmt.Printf("Error writing IR to file: %s\n", err)
 		return
 	}
 

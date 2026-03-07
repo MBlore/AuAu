@@ -1,0 +1,18 @@
+func main:
+block0:
+  t0 = alloc
+  t1 = const 1
+  t2 = const 2
+  t3 = const 1
+  t4 = sub t2, t3
+  t5 = add t1, t4
+  t6 = const 1
+  t7 = const 2
+  t8 = div t6, t7
+  t9 = const 3
+  t10 = neg t9
+  t11 = mul t8, t10
+  t12 = add t5, t11
+  store t0, t12
+func Test:
+block0:
