@@ -154,3 +154,46 @@ func TestReadTwoFuncs(t *testing.T) {
 		t.Errorf("Expected 'Foo' function return type to be 'int', got %v", fooFunc.ReturnType.Kind)
 	}
 }
+
+func TestAssignmentParsing(t *testing.T) {
+	input := `package "main"
+	void main() {
+		int a = 1 + 2
+		int b = 1 + 2 + 3
+		int c = a + b
+		int d = (1) + (2)
+		int e = (1 + 2) + 3
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+}
+
+func TestAssignmentParsingNested(t *testing.T) {
+	input := `package "main"
+	void main() {
+		int a = 1 + (2 * -3) - 4 / 2
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+}

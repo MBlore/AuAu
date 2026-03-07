@@ -103,6 +103,14 @@ type BinaryExpr struct {
 
 func (*BinaryExpr) isExpr() {}
 
+type UnaryExpr struct {
+	NodeMeta
+	Expr Expr
+	Op   token.TokenType
+}
+
+func (*UnaryExpr) isExpr() {}
+
 func TypeKindToString(t TypeKind) string {
 	switch t {
 	case TypeInt:

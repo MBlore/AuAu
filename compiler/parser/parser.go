@@ -177,7 +177,7 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			p.advance()
 
 			var err error
-			initExpr, err = p.parseExpr()
+			initExpr, err = p.parseExpr(0)
 			if err != nil {
 				return nil, errors.New("expected initializer expression after '=' in variable declaration")
 			}

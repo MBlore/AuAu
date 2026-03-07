@@ -116,3 +116,18 @@ func LookupKeyword(ident string) TokenType {
 
 	return Ident
 }
+
+func TokenTypeToString(t TokenType) string {
+	switch t {
+	case Plus:
+		return "+"
+	case Asterisk:
+		return "*"
+	case Minus:
+		return "-"
+	case Slash:
+		return "/"
+	}
+
+	return "Unknown"
+}
