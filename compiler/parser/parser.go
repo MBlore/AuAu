@@ -67,52 +67,6 @@ func (p *Parser) Parse() ParseResult {
 	return ParseResult{File: &sourceFile, Errors: p.errors}
 }
 
-// addError adds an error to the parsers error list with file, line, and column information
-// from the provided token.
-func (p *Parser) addError(tok token.Token, err error) {
-	strError := fmt.Sprintf("%s:%d:%d: %s", p.filename, tok.Line, tok.Col, err.Error())
-	p.errors = append(p.errors, errors.New(strError))
-}
-
-// expect validates the current position token to be the specified token type. If it is, the parsing
-// position is advanced to the next token. If not, an error is returned.
-func (p *Parser) expect(tt token.TokenType) (token.Token, error) {
-	tok := p.peek()
-	if tok.Type != tt {
-		return tok, errors.New("unexpected token")
-	}
-
-	p.advance()
-	return tok, nil
-}
-
-// advance moves the token index forward by one.
-func (p *Parser) advance() token.Token {
-	if p.pos < len(p.tokens) {
-		p.pos++
-	}
-
-	return p.peek()
-}
-
-// peek returns the token at the current parsing position without consuming it.
-func (p *Parser) peek() token.Token {
-	if p.pos >= len(p.tokens) {
-		return token.Token{Type: token.EOF}
-	}
-
-	return p.tokens[p.pos]
-}
-
-// peekOffset returns the token at the current parsing position plus the offset, without consuming it.
-func (p *Parser) peekAhead(offset int) token.Token {
-	if p.pos+offset >= len(p.tokens) {
-		return token.Token{Type: token.EOF}
-	}
-
-	return p.tokens[p.pos+offset]
-}
-
 func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 	retType, err := p.parseType()
 	if err != nil {
@@ -163,6 +117,27 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 func (p *Parser) parseStatement() (ast.Stmt, error) {
 	tok := p.peek()
 	switch tok.Type {
+	case token.Return:
+		p.advance()
+
+		var returnExpr ast.Expr
+
+		if p.isExprStart(p.peek().Type) {
+			expr, err := p.parseNewExpr()
+			if err != nil {
+				return nil, fmt.Errorf("invalid return expression: %w", err)
+			}
+
+			// Sometimes people will think the language supports multiple return with this kind of syntax, so
+			// we can be helpful and let them know we don't have that feature if they try to use it.
+			if p.peek().Type == token.Comma {
+				return nil, errors.New("unexpected ',' after return expression, multiple return types are not allowed")
+			}
+
+			returnExpr = expr
+		}
+
+		return &ast.ReturnStmt{ReturnExpr: returnExpr}, nil
 	case token.IntKw:
 		p.advance()
 		// Expect an identifier for the variable name.
@@ -177,9 +152,9 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			p.advance()
 
 			var err error
-			initExpr, err = p.parseExpr(0)
+			initExpr, err = p.parseNewExpr()
 			if err != nil {
-				return nil, errors.New("expected initializer expression after '=' in variable declaration")
+				return nil, errors.New("invalid initializer expression after '=' in variable declaration")
 			}
 		}
 

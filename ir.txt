@@ -14,5 +14,7 @@ block0:
   t11 = mul t8, t10
   t12 = add t5, t11
   store t0, t12
+  ret
 func Test:
 block0:
+  ret

@@ -112,6 +112,26 @@ func LookupKeyword(ident string) TokenType {
 		return Void
 	case "int":
 		return IntKw
+	case "return":
+		return Return
+	case "if":
+		return If
+	case "else":
+		return Else
+	case "while":
+		return While
+	case "for":
+		return For
+	case "break":
+		return Break
+	case "continue":
+		return Continue
+	case "extern":
+		return Extern
+	case "struct":
+		return Struct
+	case "import":
+		return Import
 	}
 
 	return Ident

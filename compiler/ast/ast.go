@@ -76,6 +76,13 @@ type VarDeclStmt struct {
 
 func (*VarDeclStmt) isStmt() {}
 
+type ReturnStmt struct {
+	NodeMeta
+	ReturnExpr Expr
+}
+
+func (*ReturnStmt) isStmt() {}
+
 type Expr interface {
 	isExpr()
 }

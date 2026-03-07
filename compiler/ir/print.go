@@ -57,6 +57,12 @@ func InstrToString(instr *Instr) string {
 		return fmt.Sprintf("%s = alloc",
 			printValue(instr.Dest),
 		)
+	case OpRet:
+		if len(instr.Args) == 0 {
+			return "ret"
+		}
+
+		return fmt.Sprintf("ret %s", printValue(instr.Args[0]))
 	default:
 		return fmt.Sprintf("%s = <unknown op %d>",
 			printValue(instr.Dest),

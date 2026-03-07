@@ -101,8 +101,8 @@ func (b *Builder) Load(addr IRValue) IRValue {
 	return dest
 }
 
-// Ret creates a new return instruction with the given values.
-func (b *Builder) Ret(vals ...IRValue) {
+// Return creates a new return instruction with the given values.
+func (b *Builder) Return(vals ...IRValue) {
 	if len(vals) > 1 {
 		// Panic here, as it should have been caught by the semantic analysis phase.
 		panic("IR builder: multiple return values not supported yet")

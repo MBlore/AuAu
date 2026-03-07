@@ -10,6 +10,12 @@ import (
 	"github.com/MBlore/AuAu/token"
 )
 
+// parseNewExpr is the entry point for parsing an expression.
+// It will call parseExpr with a minimum binding power of 0 to start parsing the expression.
+func (p *Parser) parseNewExpr() (ast.Expr, error) {
+	return p.parseExpr(0)
+}
+
 // parseExpr will parse all types of RHS expressions, using a Pratt Parsing method.
 // It looks across multiple tokens and builds the binary operations tree.
 func (p *Parser) parseExpr(minBP int) (ast.Expr, error) {
@@ -62,7 +68,7 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 		p.advance()
 
 		// Going in to a new expression inside brackets, so we need to parse it recursively.
-		expr, err := p.parseExpr(0)
+		expr, err := p.parseNewExpr()
 		if err != nil {
 			return nil, fmt.Errorf("expected expression after '(': %w", err)
 		}

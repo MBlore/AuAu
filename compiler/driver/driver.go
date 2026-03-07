@@ -6,8 +6,8 @@ import (
 
 	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/backend"
+	"github.com/MBlore/AuAu/ir"
 	"github.com/MBlore/AuAu/lexer"
-	"github.com/MBlore/AuAu/lowering"
 	"github.com/MBlore/AuAu/parser"
 	"github.com/MBlore/AuAu/token"
 )
@@ -104,7 +104,7 @@ func Run(args []string) {
 	}
 
 	// Step 3: Lower the AST to IR.
-	irProgram, err := lowering.LowerToIR(pr.File)
+	irProgram, err := ir.CompileFile(pr.File)
 	if err != nil {
 		fmt.Printf("Error lowering to IR: %s\n", err)
 		return
