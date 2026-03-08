@@ -1,12 +1,19 @@
 package ir
 
-type IRType int
+type TypeKind int
 
 const (
-	IRTypeInvalid IRType = iota
-	IRTypeI64
-	IRTypeU64
+	TypeI32 TypeKind = iota
+	TypeI64
+	TypeU32
+	TypeU64
+	TypePtr
 )
+
+type Type struct {
+	Kind TypeKind
+	Elem *Type
+}
 
 type IRProgram struct {
 	Functions []*Function
@@ -41,6 +48,7 @@ const (
 type Instr struct {
 	Op   OpCode
 	Dest IRValue
+	Type Type
 	Args []IRValue
 	// For OpConst, the constant value is stored here.
 	Const int64
@@ -48,6 +56,7 @@ type Instr struct {
 
 type Function struct {
 	Name   string
+	Public bool
 	Blocks []*Block
 }
 

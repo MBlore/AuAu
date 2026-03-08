@@ -28,12 +28,12 @@ func InstrToString(instr *Instr) string {
 
 	case OpConst:
 		return fmt.Sprintf("%s = const %d",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 			instr.Const,
 		)
 	case OpLoad:
 		return fmt.Sprintf("%s = load %s",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 			printValue(instr.Args[0]),
 		)
 	case OpStore:
@@ -43,19 +43,19 @@ func InstrToString(instr *Instr) string {
 		)
 	case OpAdd, OpSub, OpMul, OpDiv:
 		return fmt.Sprintf("%s = %s %s, %s",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 			opToString(instr.Op),
 			printValue(instr.Args[0]),
 			printValue(instr.Args[1]),
 		)
 	case OpNeg:
 		return fmt.Sprintf("%s = neg %s",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 			printValue(instr.Args[0]),
 		)
 	case OpAlloc:
 		return fmt.Sprintf("%s = alloc",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 		)
 	case OpReturn:
 		if len(instr.Args) == 0 {
@@ -65,7 +65,7 @@ func InstrToString(instr *Instr) string {
 		return fmt.Sprintf("ret %s", printValue(instr.Args[0]))
 	default:
 		return fmt.Sprintf("%s = <unknown op %d>",
-			printValue(instr.Dest),
+			printTypedValue(instr.Dest, instr.Type),
 			instr.Op,
 		)
 	}
@@ -73,6 +73,30 @@ func InstrToString(instr *Instr) string {
 
 func printValue(v IRValue) string {
 	return fmt.Sprintf("t%d", v)
+}
+
+func printTypedValue(v IRValue, tp Type) string {
+	return fmt.Sprintf("%s:%s", printValue(v), printType(tp))
+}
+
+func printType(tp Type) string {
+	switch tp.Kind {
+	case TypeI32:
+		return "i32"
+	case TypeI64:
+		return "i64"
+	case TypeU32:
+		return "u32"
+	case TypeU64:
+		return "u64"
+	case TypePtr:
+		if tp.Elem == nil {
+			return "ptr<?>"
+		}
+		return fmt.Sprintf("ptr<%s>", printType(*tp.Elem))
+	default:
+		return "<invalid-type>"
+	}
 }
 
 func opToString(op OpCode) string {

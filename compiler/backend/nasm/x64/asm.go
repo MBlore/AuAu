@@ -23,7 +23,9 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 		frame := buildStackFrame(fn)
 
 		// Write the function prologue.
-		b.WriteString("global " + fn.Name + "\n")
+		if fn.Public || fn.Name == "main" {
+			b.WriteString("global " + fn.Name + "\n")
+		}
 		b.WriteString(fn.Name + ":\n")
 		b.WriteString("  push rbp\n")
 		b.WriteString("  mov rbp, rsp\n")

@@ -1,20 +1,35 @@
 func main:
 block0:
-  t0 = alloc
-  t1 = const 1
-  t2 = const 2
-  t3 = const 1
-  t4 = sub t2, t3
-  t5 = add t1, t4
-  t6 = const 1
-  t7 = const 2
-  t8 = div t6, t7
-  t9 = const 3
-  t10 = neg t9
-  t11 = mul t8, t10
-  t12 = add t5, t11
+  t0:ptr<i64> = alloc
+  t1:i64 = const 1
+  t2:i64 = const 2
+  t3:i64 = const 1
+  t4:i64 = sub t2, t3
+  t5:i64 = add t1, t4
+  t6:i64 = const 1
+  t7:i64 = const 2
+  t8:i64 = div t6, t7
+  t9:i64 = const 3
+  t10:i64 = neg t9
+  t11:i64 = mul t8, t10
+  t12:i64 = add t5, t11
   store t0, t12
   ret
 func Test:
 block0:
-  ret
+  t0:i64 = const 5
+  t1:i64 = const 5
+  t2:i64 = add t0, t1
+  t3:i64 = const 5
+  t4:i64 = add t2, t3
+  t5:i64 = const 5
+  t6:i64 = add t4, t5
+  t7:i64 = const 5
+  t8:i64 = add t6, t7
+  t9:i64 = const 1
+  t10:i64 = sub t8, t9
+  ret t10
+func testTwo:
+block0:
+  t0:i64 = const 77
+  ret t0

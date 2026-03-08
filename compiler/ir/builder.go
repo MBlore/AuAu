@@ -1,7 +1,7 @@
 package ir
 
-func NewBuilder(name string) *Builder {
-	fn := &Function{Name: name}
+func NewBuilder(name string, public bool) *Builder {
+	fn := &Function{Name: name, Public: public}
 
 	b := &Builder{
 		fn: fn,
@@ -33,12 +33,16 @@ func (b *Builder) NewValue() IRValue {
 	return val
 }
 
-// Emit creates a new instruction with the given opcode and arguments, and returns the destination value.
-func (b *Builder) Emit(op OpCode, args ...IRValue) IRValue {
+func (b *Builder) ensureBlock() {
 	if b.current == nil {
 		// Panic here, as it should have been caught by the semantic analysis phase.
 		panic("IR builder: no current block")
 	}
+}
+
+// emitValue creates a new instruction with the given opcode and arguments, and returns the destination value.
+func (b *Builder) emitValue(op OpCode, tp Type, args ...IRValue) IRValue {
+	b.ensureBlock()
 
 	// In true SSA form, each instruction produces a new value.
 	dest := b.NewValue()
@@ -46,6 +50,7 @@ func (b *Builder) Emit(op OpCode, args ...IRValue) IRValue {
 	instr := &Instr{
 		Op:   op,
 		Dest: dest,
+		Type: tp,
 		Args: args,
 	}
 
@@ -53,14 +58,37 @@ func (b *Builder) Emit(op OpCode, args ...IRValue) IRValue {
 	return dest
 }
 
+func (b *Builder) Add(tp Type, l, r IRValue) IRValue {
+	return b.emitValue(OpAdd, tp, l, r)
+}
+
+func (b *Builder) Sub(tp Type, l, r IRValue) IRValue {
+	return b.emitValue(OpSub, tp, l, r)
+}
+
+func (b *Builder) Mul(tp Type, l, r IRValue) IRValue {
+	return b.emitValue(OpMul, tp, l, r)
+}
+
+func (b *Builder) Div(tp Type, l, r IRValue) IRValue {
+	return b.emitValue(OpDiv, tp, l, r)
+}
+
+func (b *Builder) Neg(tp Type, val IRValue) IRValue {
+	return b.emitValue(OpNeg, tp, val)
+}
+
 // Const creates a new constant instruction and returns the destination value.
-func (b *Builder) Const(value int64) IRValue {
+func (b *Builder) Const(tp Type, value int64) IRValue {
+	b.ensureBlock()
+
 	// Every constant also produces a new value (SSA form).
 	dest := b.NewValue()
 
 	instr := &Instr{
 		Op:    OpConst,
 		Dest:  dest,
+		Type:  tp,
 		Const: value,
 	}
 
@@ -70,10 +98,7 @@ func (b *Builder) Const(value int64) IRValue {
 
 // Store creates a new store instruction to store a value at a given address.
 func (b *Builder) Store(addr IRValue, val IRValue) {
-	if b.current == nil {
-		// Panic here, as it should have been caught by the semantic analysis phase.
-		panic("IR builder: no current block")
-	}
+	b.ensureBlock()
 
 	instr := &Instr{
 		Op:   OpStore,
@@ -84,16 +109,15 @@ func (b *Builder) Store(addr IRValue, val IRValue) {
 }
 
 // Load creates a new load instruction to load a value from a given address, and returns the loaded value.
-func (b *Builder) Load(addr IRValue) IRValue {
-	if b.current == nil {
-		// Panic here, as it should have been caught by the semantic analysis phase.
-		panic("IR builder: no current block")
-	}
+func (b *Builder) Load(tp Type, addr IRValue) IRValue {
+	b.ensureBlock()
 
 	dest := b.NewValue()
+
 	instr := &Instr{
 		Op:   OpLoad,
 		Dest: dest,
+		Type: tp,
 		Args: []IRValue{addr},
 	}
 
@@ -103,6 +127,8 @@ func (b *Builder) Load(addr IRValue) IRValue {
 
 // Return creates a new return instruction with the given values.
 func (b *Builder) Return(vals ...IRValue) {
+	b.ensureBlock()
+
 	if len(vals) > 1 {
 		// Panic here, as it should have been caught by the semantic analysis phase.
 		panic("IR builder: multiple return values not supported yet")
@@ -116,7 +142,15 @@ func (b *Builder) Return(vals ...IRValue) {
 	b.current.Instrs = append(b.current.Instrs, instr)
 }
 
+// PtrType creates a pointer type for the given element type.
+func PtrType(elem Type) Type {
+	return Type{
+		Kind: TypePtr,
+		Elem: &elem,
+	}
+}
+
 // Alloc creates a new allocation instruction and returns the address of the allocated memory.
-func (b *Builder) Alloc() IRValue {
-	return b.Emit(OpAlloc)
+func (b *Builder) Alloc(elem Type) IRValue {
+	return b.emitValue(OpAlloc, PtrType(elem))
 }

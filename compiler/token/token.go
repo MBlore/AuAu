@@ -132,22 +132,43 @@ func LookupKeyword(ident string) TokenType {
 		return Struct
 	case "import":
 		return Import
+	case "uint8":
+		return UInt8Kw
+	case "uint16":
+		return UInt16Kw
+	case "uint32":
+		return UInt32Kw
+	case "uint64":
+		return UInt64Kw
+	case "uint":
+		return UIntKw
+	case "int8":
+		return Int8Kw
+	case "int16":
+		return Int16Kw
+	case "int32":
+		return Int32Kw
+	case "int64":
+		return Int64Kw
+	case "byte":
+		return ByteKw
+	case "rune":
+		return RuneKw
+	case "string":
+		return StringKw
+	case "bool":
+		return BoolKw
+	case "float32":
+		return Float32Kw
+	case "float64":
+		return Float64Kw
+	case "true":
+		return True
+	case "false":
+		return False
+	case "null":
+		return Null
 	}
 
 	return Ident
-}
-
-func TokenTypeToString(t TokenType) string {
-	switch t {
-	case Plus:
-		return "+"
-	case Asterisk:
-		return "*"
-	case Minus:
-		return "-"
-	case Slash:
-		return "/"
-	}
-
-	return "Unknown"
 }

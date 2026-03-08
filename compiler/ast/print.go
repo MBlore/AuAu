@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-
-	"github.com/MBlore/AuAu/token"
 )
 
 type AstPrinter struct {
@@ -55,6 +53,14 @@ func (p *AstPrinter) printBlock(block *BlockStmt) {
 
 func (p *AstPrinter) printStmt(stmt Stmt) {
 	switch s := stmt.(type) {
+	case *ReturnStmt:
+		if s.ReturnExpr != nil {
+			fmt.Fprintf(&p.buff, "%sreturn\n", p.prefix())
+			p.printExpr(s.ReturnExpr, p.indentLevel+1)
+			p.buff.WriteString("\n")
+		} else {
+			fmt.Fprintf(&p.buff, "%sreturn\n", p.prefix())
+		}
 	case *VarDeclStmt:
 		if s.Init != nil {
 			fmt.Fprintf(&p.buff, "%svar %s %s = \n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
@@ -75,10 +81,10 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 	case *IntLiteralExpr:
 		p.buff.WriteString(fmt.Sprintf("%sInt(%d)\n", pad, e.Value))
 	case *UnaryExpr:
-		p.buff.WriteString(fmt.Sprintf("%sUnary(%s)\n", pad, token.TokenTypeToString(e.Op)))
+		p.buff.WriteString(fmt.Sprintf("%sUnary(%s)\n", pad, TokenTypeToString(e.Op)))
 		p.printExpr(e.Expr, indent+1)
 	case *BinaryExpr:
-		p.buff.WriteString(fmt.Sprintf("%sBinary(%s)\n", pad, token.TokenTypeToString(e.Op)))
+		p.buff.WriteString(fmt.Sprintf("%sBinary(%s)\n", pad, TokenTypeToString(e.Op)))
 
 		p.printExpr(e.Left, indent+1)
 		p.printExpr(e.Right, indent+1)

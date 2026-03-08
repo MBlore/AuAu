@@ -52,7 +52,7 @@ func Run(args []string) {
 
 	fmt.Printf("Compiling %s...\n", filename)
 
-	// Phase one: Lex.
+	// Load source code from file.
 	source, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Printf("Error reading file: %s\n", err)

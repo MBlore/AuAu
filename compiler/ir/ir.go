@@ -33,7 +33,7 @@ func CompileFile(file *ast.File) (*IRProgram, error) {
 // buildFunction creates a new IR function and emits instructions for the function body.
 func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 	// Builder helps emit opcodes and the lowerer holds state across the process.
-	builder := NewBuilder(fn.Name)
+	builder := NewBuilder(fn.Name, fn.IsPublic)
 
 	l := &Lowerer{
 		builder: builder,
@@ -44,6 +44,10 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 	// Its valid for a void return function to not have one in the AST but we have
 	// ensure at the IR/Backend level that all functions have a return instruction.
 	hasReturn := false
+
+	// TODO: Returns are also valid in if/else blocks, loops, and possibly others.
+	// Semantic analysis should ensure that all code paths in a non-void function
+	// have a return, and that void functions don't return values.
 	for _, st := range fn.Body.Stmts {
 		if _, ok := st.(*ast.ReturnStmt); ok {
 			hasReturn = true
@@ -82,10 +86,10 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 			}
 		case *ast.VarDeclStmt:
 			// Create a new address value for the variable.
-			addr := l.builder.Alloc()
+			addr := l.builder.Alloc(Type{Kind: TypeI64})
 
 			// Remember the variable name and its address.
-			if l.vars[s.Name] != 0 {
+			if _, exists := l.vars[s.Name]; exists {
 				// This should have been caught by the semantic phase.
 				panic(fmt.Sprintf("variable %s already declared", s.Name))
 			}
@@ -114,7 +118,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
 	case *ast.IntLiteralExpr:
 		// This handles cases such as 'int a = 5'.
-		return l.builder.Const(e.Value), nil
+		return l.builder.Const(Type{Kind: TypeI64}, e.Value), nil
 	case *ast.UnaryExpr:
 		// This handles cases where a unary op appears in any expression.
 		val, err := l.emitExpr(e.Expr)
@@ -124,7 +128,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 
 		switch e.Op {
 		case token.Minus:
-			return l.builder.Emit(OpNeg, val), nil
+			return l.builder.Neg(Type{Kind: TypeI64}, val), nil
 		default:
 			return 0, fmt.Errorf("unsupported unary operator %s", e.Op)
 		}
@@ -143,13 +147,13 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		// Emit the binary operation instruction.
 		switch e.Op {
 		case token.Plus:
-			return l.builder.Emit(OpAdd, left, right), nil
+			return l.builder.Add(Type{Kind: TypeI64}, left, right), nil
 		case token.Minus:
-			return l.builder.Emit(OpSub, left, right), nil
+			return l.builder.Sub(Type{Kind: TypeI64}, left, right), nil
 		case token.Asterisk:
-			return l.builder.Emit(OpMul, left, right), nil
+			return l.builder.Mul(Type{Kind: TypeI64}, left, right), nil
 		case token.Slash:
-			return l.builder.Emit(OpDiv, left, right), nil
+			return l.builder.Div(Type{Kind: TypeI64}, left, right), nil
 		default:
 			return 0, fmt.Errorf("unsupported binary operator %s", e.Op)
 		}
