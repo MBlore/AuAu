@@ -22,6 +22,7 @@ func Validate(file *ast.File) []error {
 	ensurePackageDeclared(context)
 	ensureUniqueFunctionNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
+	inferConstantTypes(context)
 
 	return context.errors
 }

@@ -150,7 +150,7 @@ func TestReadTwoFuncs(t *testing.T) {
 	if fooFunc.IsPublic != true {
 		t.Errorf("Expected 'Foo' function to be public, got IsPublic=%v", fooFunc.IsPublic)
 	}
-	if fooFunc.ReturnType.Kind != ast.TypeInt {
+	if fooFunc.ReturnType.Kind != ast.TypeInt64 {
 		t.Errorf("Expected 'Foo' function return type to be 'int', got %v", fooFunc.ReturnType.Kind)
 	}
 }
@@ -195,5 +195,58 @@ func TestAssignmentParsingNested(t *testing.T) {
 	pr := parser.Parse()
 	if len(pr.Errors) != 0 {
 		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+}
+
+func TestVariableTypesParsing(t *testing.T) {
+	input := `package "main"
+	void main() {
+		int a = 1
+
+		uint8 b = 255
+		uint16 c = 65535
+		uint32 d = 4294967295
+		uint64 e = 18446744073709551615
+		
+		int8 f = -128
+		int16 g = -32768
+		int32 h = -2147483648
+		int64 i = -9223372036854775808
+
+		byte j = 255
+		rune k = 1114111
+		bool l = true
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	// Check parsed variable types match what we expect.
+	mainFunc := pr.File.Functions[0]
+	expectedTypes := []ast.TypeKind{
+		ast.TypeInt, ast.TypeUInt8, ast.TypeUInt16, ast.TypeUInt32, ast.TypeUInt64,
+		ast.TypeInt8, ast.TypeInt16, ast.TypeInt32, ast.TypeInt64,
+		ast.TypeByte, ast.TypeRune, ast.TypeBool,
+	}
+
+	for i, stmt := range mainFunc.Body.Stmts {
+		decl, ok := stmt.(*ast.VarDeclStmt)
+		if !ok {
+			t.Errorf("Expected VarDeclStmt, got %T", stmt)
+			continue
+		}
+		if decl.Type.Kind != expectedTypes[i] {
+			t.Errorf("Expected type %v, got %v", expectedTypes[i], decl.Type.Kind)
+		}
 	}
 }

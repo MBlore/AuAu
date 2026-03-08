@@ -81,10 +81,18 @@ func printTypedValue(v IRValue, tp Type) string {
 
 func printType(tp Type) string {
 	switch tp.Kind {
+	case TypeI8:
+		return "i8"
+	case TypeI16:
+		return "i16"
 	case TypeI32:
 		return "i32"
 	case TypeI64:
 		return "i64"
+	case TypeU8:
+		return "u8"
+	case TypeU16:
+		return "u16"
 	case TypeU32:
 		return "u32"
 	case TypeU64:

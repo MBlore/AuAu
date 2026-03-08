@@ -5,6 +5,10 @@ type TypeKind int
 const (
 	TypeI32 TypeKind = iota
 	TypeI64
+	TypeI16
+	TypeI8
+	TypeU8
+	TypeU16
 	TypeU32
 	TypeU64
 	TypePtr

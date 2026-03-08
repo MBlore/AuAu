@@ -1,17 +1,10 @@
 package main
 func main() return=void public=false
   var a int = 
-    Binary(+)
-      Binary(+)
-        Int(1)
-        Binary(-)
-          Int(2)
-          Int(1)
-      Binary(*)
-        Binary(/)
-          Int(1)
-          Int(2)
-        Unary(-)
-          Int(3)
-
-func Test() return=int public=true
+    Int(1)
+  var b int8 = 
+    Int(2)
+  var c int16 = 
+    Int(3)
+  var d int32 = 
+    Int(4)

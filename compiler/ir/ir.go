@@ -2,6 +2,7 @@ package ir
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/token"
@@ -118,7 +119,13 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
 	case *ast.IntLiteralExpr:
 		// This handles cases such as 'int a = 5'.
-		return l.builder.Const(Type{Kind: TypeI64}, e.Value), nil
+		val, err := strconv.ParseUint(e.Literal, 10, 64)
+
+		if err != nil {
+			return 0, fmt.Errorf("invalid integer literal %s: %w", e.Literal, err)
+		}
+
+		return l.builder.Const(Type{Kind: TypeI64}, int64(val)), nil
 	case *ast.UnaryExpr:
 		// This handles cases where a unary op appears in any expression.
 		val, err := l.emitExpr(e.Expr)

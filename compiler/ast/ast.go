@@ -9,7 +9,22 @@ type TypeKind int
 const (
 	TypeInvalid TypeKind = iota
 	TypeVoid
+	TypeNull
+
 	TypeInt
+	TypeInt64
+	TypeInt32
+	TypeInt16
+	TypeInt8
+	TypeUInt64
+	TypeUInt32
+	TypeUInt16
+	TypeUInt8
+
+	TypeBool
+	TypeByte
+	TypeRune
+	TypeString
 )
 
 type TypeRef struct {
@@ -17,8 +32,21 @@ type TypeRef struct {
 }
 
 var (
-	TypeVoidRef = &TypeRef{Kind: TypeVoid}
-	TypeIntRef  = &TypeRef{Kind: TypeInt}
+	TypeVoidRef   = &TypeRef{Kind: TypeVoid}
+	TypeIntRef    = &TypeRef{Kind: TypeInt}
+	TypeInt64Ref  = &TypeRef{Kind: TypeInt64}
+	TypeInt32Ref  = &TypeRef{Kind: TypeInt32}
+	TypeInt16Ref  = &TypeRef{Kind: TypeInt16}
+	TypeInt8Ref   = &TypeRef{Kind: TypeInt8}
+	TypeUInt64Ref = &TypeRef{Kind: TypeUInt64}
+	TypeUInt32Ref = &TypeRef{Kind: TypeUInt32}
+	TypeUInt16Ref = &TypeRef{Kind: TypeUInt16}
+	TypeUInt8Ref  = &TypeRef{Kind: TypeUInt8}
+	TypeBoolRef   = &TypeRef{Kind: TypeBool}
+	TypeByteRef   = &TypeRef{Kind: TypeByte}
+	TypeRuneRef   = &TypeRef{Kind: TypeRune}
+	TypeStringRef = &TypeRef{Kind: TypeString}
+	TypeNullRef   = &TypeRef{Kind: TypeNull}
 )
 
 // File is a collection of parsed source code for a single source file.
@@ -89,10 +117,19 @@ type Expr interface {
 
 type IntLiteralExpr struct {
 	NodeMeta
-	Value int64
+	Literal      string
+	Base         int
+	InferredType *TypeRef // This will be filled in during type inference.
 }
 
 func (*IntLiteralExpr) isExpr() {}
+
+type BoolLiteralExpr struct {
+	NodeMeta
+	Value bool
+}
+
+func (*BoolLiteralExpr) isExpr() {}
 
 type IdentExpr struct {
 	NodeMeta
@@ -120,10 +157,36 @@ func (*UnaryExpr) isExpr() {}
 
 func TypeKindToString(t TypeKind) string {
 	switch t {
-	case TypeInt:
-		return "int"
+	case TypeInt64:
+		return "int64"
 	case TypeVoid:
 		return "void"
+	case TypeNull:
+		return "null"
+	case TypeInt:
+		return "int"
+	case TypeInt32:
+		return "int32"
+	case TypeInt16:
+		return "int16"
+	case TypeInt8:
+		return "int8"
+	case TypeUInt64:
+		return "uint64"
+	case TypeUInt32:
+		return "uint32"
+	case TypeUInt16:
+		return "uint16"
+	case TypeUInt8:
+		return "uint8"
+	case TypeBool:
+		return "bool"
+	case TypeByte:
+		return "byte"
+	case TypeRune:
+		return "rune"
+	case TypeString:
+		return "string"
 	}
 	return "unknown"
 }

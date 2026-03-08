@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/MBlore/AuAu/ast"
@@ -112,12 +111,10 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 			lit = lit[2:]
 		}
 
-		val, err := strconv.ParseInt(lit, base, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid integer literal: %w", err)
-		}
-
-		return &ast.IntLiteralExpr{Value: val, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
+		return &ast.IntLiteralExpr{Literal: lit, Base: base, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
+	case token.True, token.False:
+		p.advance()
+		return &ast.BoolLiteralExpr{Value: tok.Type == token.True, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
 	default:
 		return nil, errors.New("unexpected token, expected primary expression")
 	}

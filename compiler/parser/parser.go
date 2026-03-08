@@ -48,12 +48,11 @@ func (p *Parser) Parse() ParseResult {
 	funcs := []*ast.FuncDecl{}
 
 	for p.peek().Type != token.EOF {
-		tok := p.peek()
-
 		// We're only expecting function declarations at the moment.
 		f, err := p.parseFuncDecl()
 		if err != nil {
-			p.addError(tok, err)
+			// Peek on error as parsing would have advanced.
+			p.addError(p.peek(), err)
 			return ParseResult{Errors: p.errors}
 		}
 
@@ -143,8 +142,13 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 		}
 
 		return &ast.ReturnStmt{ReturnExpr: returnExpr}, nil
-	case token.IntKw:
-		p.advance()
+	default:
+		// Assume its a variable definition for now.
+		varType, err := p.parseType()
+		if err != nil {
+			return nil, errors.New("expected type, found unexpected token: " + tok.Literal)
+		}
+
 		// Expect an identifier for the variable name.
 		varName, err := p.expect(token.Ident)
 		if err != nil {
@@ -165,11 +169,9 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 
 		return &ast.VarDeclStmt{
 			Name: varName.Literal,
-			Type: ast.TypeIntRef,
+			Type: varType,
 			Init: initExpr,
 		}, nil
-	default:
-		return nil, errors.New("unexpected token, expected statement")
 	}
 }
 
@@ -223,6 +225,42 @@ func (p *Parser) parseType() (*ast.TypeRef, error) {
 	case token.IntKw:
 		p.advance()
 		return ast.TypeIntRef, nil
+	case token.StringKw:
+		p.advance()
+		return ast.TypeStringRef, nil
+	case token.BoolKw:
+		p.advance()
+		return ast.TypeBoolRef, nil
+	case token.ByteKw:
+		p.advance()
+		return ast.TypeByteRef, nil
+	case token.RuneKw:
+		p.advance()
+		return ast.TypeRuneRef, nil
+	case token.UInt8Kw:
+		p.advance()
+		return ast.TypeUInt8Ref, nil
+	case token.UInt16Kw:
+		p.advance()
+		return ast.TypeUInt16Ref, nil
+	case token.UInt32Kw:
+		p.advance()
+		return ast.TypeUInt32Ref, nil
+	case token.UInt64Kw:
+		p.advance()
+		return ast.TypeUInt64Ref, nil
+	case token.Int8Kw:
+		p.advance()
+		return ast.TypeInt8Ref, nil
+	case token.Int16Kw:
+		p.advance()
+		return ast.TypeInt16Ref, nil
+	case token.Int32Kw:
+		p.advance()
+		return ast.TypeInt32Ref, nil
+	case token.Int64Kw:
+		p.advance()
+		return ast.TypeInt64Ref, nil
 	default:
 		return nil, errors.New("unexpected token, expecting type")
 	}
