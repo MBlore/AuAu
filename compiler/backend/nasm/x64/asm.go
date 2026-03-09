@@ -76,30 +76,109 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 		fmt.Fprintf(b, "  pop rbp\n")
 		fmt.Fprintf(b, "  ret\n")
 	case ir.OpAdd:
-		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
-		fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
-		fmt.Fprintf(b, "  add rax, rcx\n")
-		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		bs := max(bitSize(instr.Type), 32)
+
+		switch bs {
+		case 64:
+			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  add rax, rcx\n")
+			fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		case 32:
+			fmt.Fprintf(b, "  mov eax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov ecx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  add eax, ecx\n")
+			fmt.Fprintf(b, "  mov %s, eax\n", slot(frame, instr.Dest))
+		default:
+			panic(fmt.Sprintf("unsupported add width: %d", bs))
+		}
 	case ir.OpSub:
-		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
-		fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
-		fmt.Fprintf(b, "  sub rax, rcx\n")
-		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		bs := max(bitSize(instr.Type), 32)
+
+		switch bs {
+		case 64:
+			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  sub rax, rcx\n")
+			fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		case 32:
+			fmt.Fprintf(b, "  mov eax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov ecx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  sub eax, ecx\n")
+			fmt.Fprintf(b, "  mov %s, eax\n", slot(frame, instr.Dest))
+		default:
+			panic(fmt.Sprintf("unsupported sub width: %d", bs))
+		}
 	case ir.OpMul:
-		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
-		fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
-		fmt.Fprintf(b, "  imul rax, rcx\n")
-		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		bs := max(bitSize(instr.Type), 32)
+
+		switch bs {
+		case 64:
+			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  imul rax, rcx\n")
+			fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		case 32:
+			fmt.Fprintf(b, "  mov eax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov ecx, %s\n", slot(frame, instr.Args[1]))
+			fmt.Fprintf(b, "  imul eax, ecx\n")
+			fmt.Fprintf(b, "  mov %s, eax\n", slot(frame, instr.Dest))
+		default:
+			panic(fmt.Sprintf("unsupported mul width: %d", bs))
+		}
 	case ir.OpDiv:
-		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
-		fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
-		fmt.Fprintf(b, "  cqo\n")
-		fmt.Fprintf(b, "  idiv rcx\n")
-		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		bs := max(bitSize(instr.Type), 32)
+		signed := isSigned(instr.Type)
+
+		// For division, we need to use specific registers and handle signed vs unsigned cases differently.
+		switch bs {
+		case 64:
+			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
+
+			if signed {
+				fmt.Fprintf(b, "  cqo\n")
+				fmt.Fprintf(b, "  idiv rcx\n")
+			} else {
+				fmt.Fprintf(b, "  xor rdx, rdx\n")
+				fmt.Fprintf(b, "  div rcx\n")
+			}
+
+			fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+
+		case 32:
+			fmt.Fprintf(b, "  mov eax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov ecx, %s\n", slot(frame, instr.Args[1]))
+
+			if signed {
+				fmt.Fprintf(b, "  cdq\n")
+				fmt.Fprintf(b, "  idiv ecx\n")
+			} else {
+				fmt.Fprintf(b, "  xor edx, edx\n")
+				fmt.Fprintf(b, "  div ecx\n")
+			}
+
+			fmt.Fprintf(b, "  mov %s, eax\n", slot(frame, instr.Dest))
+
+		default:
+			panic(fmt.Sprintf("unsupported div width: %d", bs))
+		}
+
 	case ir.OpNeg:
-		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
-		fmt.Fprintf(b, "  neg rax\n")
-		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		bs := max(bitSize(instr.Type), 32)
+
+		switch bs {
+		case 64:
+			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  neg rax\n")
+			fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
+		case 32:
+			fmt.Fprintf(b, "  mov eax, %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  neg eax\n")
+			fmt.Fprintf(b, "  mov %s, eax\n", slot(frame, instr.Dest))
+		default:
+			panic(fmt.Sprintf("unsupported neg width: %d", bs))
+		}
 	default:
 		panic(fmt.Sprintf("Unsupported OpCode: %d", instr.Op))
 	}
