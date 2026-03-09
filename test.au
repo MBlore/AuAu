@@ -1,8 +1,14 @@
 package "main"
 
 void main() {
-    int a = 1
-    int8 b = 2
-    int16 c = 3
-    int32 d = 4
+    int a = -1 + 1 - 1 * 1 / 2
+    int8 b = -2 + 1 - 1 * 1 / 2
+    int16 c = -3 + 1 - 1 * 1 / 2
+    int32 d = -4 + 1 - 1 * 1 / 2
+    int64 e = -5 + 1 - 1 * 1 / 2
+
+    uint8 f = 6 + 1 - 1 * 1 / 2
+    uint16 g = 7 + 1 - 1 * 1 / 2
+    uint32 h = 8 + 1 - 1 * 1 / 2
+    uint64 i = 9 + 1 - 1 * 1 / 2
 }

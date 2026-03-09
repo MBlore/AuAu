@@ -55,7 +55,7 @@ type Instr struct {
 	Type Type
 	Args []IRValue
 	// For OpConst, the constant value is stored here.
-	Const int64
+	Const uint64
 }
 
 type Function struct {

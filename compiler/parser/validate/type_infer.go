@@ -36,6 +36,13 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 
 	// Now we look for IntLiteralExpr in the expression graph and set their type to the inferred type.
 	switch e := expr.(type) {
+	case *ast.IntLiteralExpr:
+		if err := literalFitsType(e, false, expectedType); err != nil {
+			ctx.errors = append(ctx.errors, err)
+			return
+		}
+
+		e.InferredType = expectedType
 	case *ast.UnaryExpr:
 		if e.Op != token.Minus {
 			return
@@ -53,6 +60,15 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 		}
 
 		lit.InferredType = expectedType
+		e.InferredType = expectedType
+	case *ast.BinaryExpr:
+		// TODO: Validate operators are valid for the types.
+		// For binary expressions, we need to validate both sides.
+		validateExprType(ctx, expectedType, e.Left)
+		validateExprType(ctx, expectedType, e.Right)
+		e.InferredType = expectedType
+	default:
+		panic(fmt.Sprintf("unexpected expression type %T in validateExprType", expr))
 	}
 }
 

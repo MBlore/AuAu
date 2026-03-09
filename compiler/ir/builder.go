@@ -79,7 +79,7 @@ func (b *Builder) Neg(tp Type, val IRValue) IRValue {
 }
 
 // Const creates a new constant instruction and returns the destination value.
-func (b *Builder) Const(tp Type, value int64) IRValue {
+func (b *Builder) Const(tp Type, value uint64) IRValue {
 	b.ensureBlock()
 
 	// Every constant also produces a new value (SSA form).

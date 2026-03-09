@@ -87,7 +87,7 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 			}
 		case *ast.VarDeclStmt:
 			// Create a new address value for the variable.
-			addr := l.builder.Alloc(Type{Kind: TypeI64})
+			addr := l.builder.Alloc(irTypeFromAstType(s.Type))
 
 			// Remember the variable name and its address.
 			if _, exists := l.vars[s.Name]; exists {
@@ -118,14 +118,15 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
 	case *ast.IntLiteralExpr:
-		// This handles cases such as 'int a = 5'.
-		val, err := strconv.ParseUint(e.Literal, 10, 64)
+		val, err := strconv.ParseUint(e.Literal, e.Base, 64)
 
 		if err != nil {
 			return 0, fmt.Errorf("invalid integer literal %s: %w", e.Literal, err)
 		}
 
-		return l.builder.Const(Type{Kind: TypeI64}, int64(val)), nil
+		t := irTypeFromAstType(e.InferredType)
+
+		return l.builder.Const(t, val), nil
 	case *ast.UnaryExpr:
 		// This handles cases where a unary op appears in any expression.
 		val, err := l.emitExpr(e.Expr)
@@ -135,7 +136,8 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 
 		switch e.Op {
 		case token.Minus:
-			return l.builder.Neg(Type{Kind: TypeI64}, val), nil
+			t := irTypeFromAstType(e.InferredType)
+			return l.builder.Neg(t, val), nil
 		default:
 			return 0, fmt.Errorf("unsupported unary operator %s", e.Op)
 		}
@@ -152,19 +154,46 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		}
 
 		// Emit the binary operation instruction.
+		t := irTypeFromAstType(e.InferredType)
 		switch e.Op {
 		case token.Plus:
-			return l.builder.Add(Type{Kind: TypeI64}, left, right), nil
+			return l.builder.Add(t, left, right), nil
 		case token.Minus:
-			return l.builder.Sub(Type{Kind: TypeI64}, left, right), nil
+			return l.builder.Sub(t, left, right), nil
 		case token.Asterisk:
-			return l.builder.Mul(Type{Kind: TypeI64}, left, right), nil
+			return l.builder.Mul(t, left, right), nil
 		case token.Slash:
-			return l.builder.Div(Type{Kind: TypeI64}, left, right), nil
+			return l.builder.Div(t, left, right), nil
 		default:
 			return 0, fmt.Errorf("unsupported binary operator %s", e.Op)
 		}
 	default:
 		return 0, fmt.Errorf("unsupported expression type %T", e)
+	}
+}
+
+// irTypeFromAstType converts an AST type to an IR type.
+func irTypeFromAstType(astType *ast.TypeRef) Type {
+	switch t := astType.Kind; t {
+	case ast.TypeInt:
+		return Type{Kind: TypeI64}
+	case ast.TypeInt8:
+		return Type{Kind: TypeI8}
+	case ast.TypeInt16:
+		return Type{Kind: TypeI16}
+	case ast.TypeInt32:
+		return Type{Kind: TypeI32}
+	case ast.TypeInt64:
+		return Type{Kind: TypeI64}
+	case ast.TypeUInt8:
+		return Type{Kind: TypeU8}
+	case ast.TypeUInt16:
+		return Type{Kind: TypeU16}
+	case ast.TypeUInt32:
+		return Type{Kind: TypeU32}
+	case ast.TypeUInt64:
+		return Type{Kind: TypeU64}
+	default:
+		panic(fmt.Sprintf("unsupported AST type %T", astType))
 	}
 }

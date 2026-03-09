@@ -140,17 +140,19 @@ func (*IdentExpr) isExpr() {}
 
 type BinaryExpr struct {
 	NodeMeta
-	Left  Expr
-	Right Expr
-	Op    token.TokenType
+	Left         Expr
+	Right        Expr
+	Op           token.TokenType
+	InferredType *TypeRef
 }
 
 func (*BinaryExpr) isExpr() {}
 
 type UnaryExpr struct {
 	NodeMeta
-	Expr Expr
-	Op   token.TokenType
+	Expr         Expr
+	Op           token.TokenType
+	InferredType *TypeRef
 }
 
 func (*UnaryExpr) isExpr() {}
