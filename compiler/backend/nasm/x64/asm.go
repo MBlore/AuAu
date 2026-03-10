@@ -16,7 +16,9 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 	// Write header.
 	b.WriteString("default rel\n")
 	b.WriteString("extern SetConsoleOutputCP\n")
+	b.WriteString("extern printf\n")
 	b.WriteString("section .rdata\n")
+	b.WriteString("fmt_int db \"%lld\", 10, 0\n")
 	b.WriteString("section .text\n")
 
 	// Compile each function in the program.
@@ -36,6 +38,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 			// Call SetConsoleOutputCP at the start of main to set the console code page to UTF-8.
 			b.WriteString("  mov ecx, 65001 ; CP_UTF8\n")
 			b.WriteString("  call SetConsoleOutputCP\n")
+
 		}
 
 		// Write function body...
@@ -60,6 +63,11 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 // emitOpCode emits the assembly code for a given IR instruction based on its OpCode.
 func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 	switch instr.Op {
+	case ir.OpPrint:
+		// Call printf with the value in RAX.
+		fmt.Fprintf(b, "  mov rcx, fmt_int\n")
+		fmt.Fprintf(b, "  mov rdx, %s\n", slot(frame, instr.Args[0]))
+		fmt.Fprintf(b, "  call printf\n")
 	case ir.OpAlloc:
 		// No code needed for allocation since we reserved stack space in the prologue.
 	case ir.OpConst:

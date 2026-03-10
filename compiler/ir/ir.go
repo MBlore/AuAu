@@ -8,11 +8,16 @@ import (
 	"github.com/MBlore/AuAu/token"
 )
 
+type varInfo struct {
+	addr IRValue
+	typ  Type
+}
+
 // Lowerer holds state for a single build file pass.
 type Lowerer struct {
 	builder *Builder
 	// vars maps variable names to their corresponding IR values.
-	vars map[string]IRValue
+	vars map[string]varInfo
 }
 
 // CompileFile converts the AST to IR. This is a simple traversal that emits IR instructions based on the AST nodes.
@@ -38,7 +43,7 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 
 	l := &Lowerer{
 		builder: builder,
-		vars:    make(map[string]IRValue),
+		vars:    make(map[string]varInfo),
 	}
 
 	// We have to check if the main outer block of the function has a return.
@@ -74,6 +79,24 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 	for _, stmt := range block.Stmts {
 		switch s := stmt.(type) {
+		case *ast.CallStmt:
+			// Emit instructions for the function call.
+			if s.FuncName == "print" {
+				// Special case for print since we don't have a standard library yet.
+				// We will emit a call to an OpPrint instruction that the backend can handle.
+				if len(s.Args) != 1 {
+					return fmt.Errorf("print expects exactly one argument")
+				}
+
+				val, err := l.emitExpr(s.Args[0])
+				if err != nil {
+					return fmt.Errorf("invalid argument to print: %w", err)
+				}
+
+				l.builder.Print(val)
+			} else {
+				panic(fmt.Sprintf("unsupported function call: %s", s.FuncName))
+			}
 		case *ast.ReturnStmt:
 			if s.ReturnExpr != nil {
 				val, err := l.emitExpr(s.ReturnExpr)
@@ -95,7 +118,7 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 				panic(fmt.Sprintf("variable %s already declared", s.Name))
 			}
 
-			l.vars[s.Name] = addr
+			l.vars[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
 
 			// If there is an initializer, emit instructions to compute its value and store it.
 			if s.Init != nil {
@@ -117,6 +140,14 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		// Look up the variable name and emit a load from its address.
+		v, ok := l.vars[e.Name]
+		if !ok {
+			return 0, fmt.Errorf("undefined variable: %s", e.Name)
+		}
+
+		return l.builder.Load(v.typ, v.addr), nil
 	case *ast.IntLiteralExpr:
 		val, err := strconv.ParseUint(e.Literal, e.Base, 64)
 

@@ -111,6 +111,14 @@ type ReturnStmt struct {
 
 func (*ReturnStmt) isStmt() {}
 
+type CallStmt struct {
+	NodeMeta
+	FuncName string
+	Args     []Expr
+}
+
+func (*CallStmt) isStmt() {}
+
 type Expr interface {
 	isExpr()
 }

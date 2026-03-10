@@ -154,3 +154,15 @@ func PtrType(elem Type) Type {
 func (b *Builder) Alloc(elem Type) IRValue {
 	return b.emitValue(OpAlloc, PtrType(elem))
 }
+
+// Print creates a new print instruction to print the given values (temporary OpCode).
+func (b *Builder) Print(val IRValue) {
+	b.ensureBlock()
+
+	instr := &Instr{
+		Op:   OpPrint,
+		Args: []IRValue{val},
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+}

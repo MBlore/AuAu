@@ -116,7 +116,48 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 func (p *Parser) parseStatement() (ast.Stmt, error) {
 	tok := p.peek()
 	switch tok.Type {
+	case token.Ident:
+		// Function call?
+		if p.peekAhead(1).Type == token.LParen {
+			fc := &ast.CallStmt{
+				FuncName: tok.Literal,
+				NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
+			}
+
+			// Skip the function name token and the opening parenthesis.
+			p.advance()
+			p.advance()
+
+			// Parse arguments until we reach the closing parenthesis.
+			args := []ast.Expr{}
+			for p.peek().Type != token.RParen {
+				arg, err := p.parseNewExpr()
+				if err != nil {
+					return nil, fmt.Errorf("invalid argument expression in function call: %w", err)
+				}
+				args = append(args, arg)
+
+				// Next token must be comma or closing parenthesis.
+				if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
+					return nil, errors.New("expected ',' or ')' after function call argument")
+				}
+
+				// If the next token is a comma, skip it and continue parsing arguments.
+				if p.peek().Type == token.Comma {
+					p.advance()
+				}
+			}
+
+			// Skip the closing parenthesis.
+			p.advance()
+
+			fc.Args = args
+			return fc, nil
+		} else {
+			return nil, errors.New("unexpected identifier")
+		}
 	case token.Return:
+
 		p.advance()
 
 		var returnExpr ast.Expr

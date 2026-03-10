@@ -113,3 +113,7 @@ func main() return=void public=false
     Ident(h)
   var r uint64 = 
     Ident(i)
+  var test int = 
+    Int(7)
+  CallStmt print
+    Ident(test)

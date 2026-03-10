@@ -53,6 +53,11 @@ func (p *AstPrinter) printBlock(block *BlockStmt) {
 
 func (p *AstPrinter) printStmt(stmt Stmt) {
 	switch s := stmt.(type) {
+	case *CallStmt:
+		fmt.Fprintf(&p.buff, "%sCallStmt %s\n", p.prefix(), s.FuncName)
+		for _, arg := range s.Args {
+			p.printExpr(arg, p.indentLevel+1)
+		}
 	case *ReturnStmt:
 		if s.ReturnExpr != nil {
 			fmt.Fprintf(&p.buff, "%sreturn\n", p.prefix())

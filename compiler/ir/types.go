@@ -47,6 +47,7 @@ const (
 	OpJump
 	OpReturn
 	OpAlloc
+	OpPrint // temporary opcode for testing purposes, to be removed later when print can be extern imported from C.
 )
 
 type Instr struct {

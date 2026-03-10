@@ -21,4 +21,7 @@ void main() {
     uint16 p = g
     uint32 q = h
     uint64 r = i
+
+    int test = 7
+    print(test)
 }
