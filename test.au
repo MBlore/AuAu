@@ -11,4 +11,14 @@ void main() {
     uint16 g = 7 + 1 - 1 * 1 / 2
     uint32 h = 8 + 1 - 1 * 1 / 2
     uint64 i = 9 + 1 - 1 * 1 / 2
+
+    int j = a
+    int8 k = b
+    int16 l = c
+    int32 m = d
+    int64 n = e
+    uint8 o = f
+    uint16 p = g
+    uint32 q = h
+    uint64 r = i
 }

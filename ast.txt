@@ -95,3 +95,21 @@ func main() return=void public=false
           Int(1)
           Int(1)
         Int(2)
+  var j int = 
+    Ident(a)
+  var k int8 = 
+    Ident(b)
+  var l int16 = 
+    Ident(c)
+  var m int32 = 
+    Ident(d)
+  var n int64 = 
+    Ident(e)
+  var o uint8 = 
+    Ident(f)
+  var p uint16 = 
+    Ident(g)
+  var q uint32 = 
+    Ident(h)
+  var r uint64 = 
+    Ident(i)

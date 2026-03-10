@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/MBlore/AuAu/ast"
-	"github.com/MBlore/AuAu/parser/validate"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -63,10 +62,6 @@ func (p *Parser) Parse() ParseResult {
 		PackageName: tokPackageName.Literal,
 		Functions:   funcs,
 	}
-
-	// Validate the AST before returning it.
-	validationErrors := validate.Validate(&sourceFile)
-	p.errors = append(p.errors, validationErrors...)
 
 	return ParseResult{File: &sourceFile, Errors: p.errors}
 }

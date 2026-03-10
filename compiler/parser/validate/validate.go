@@ -9,14 +9,17 @@ import (
 )
 
 type validateContext struct {
-	file   *ast.File
-	errors []error
+	file     *ast.File
+	varTypes map[string]*ast.TypeRef
+	errors   []error
 }
 
 // Validate takes an AST File and performs semantic validation, returning any errors found.
 func Validate(file *ast.File) []error {
 	context := &validateContext{
-		file: file,
+		file:     file,
+		varTypes: make(map[string]*ast.TypeRef),
+		errors:   []error{},
 	}
 
 	ensurePackageDeclared(context)
@@ -50,6 +53,9 @@ func ensureUniqueVariableNamesPerBlock(ctx *validateContext) {
 	}
 }
 
+// checkBlockForDuplicateVariables checks for duplicate variable names within the same block.
+// We also build the varTypes map here, which maps variable names to their declared types,
+// for use in type inference later.
 func checkBlockForDuplicateVariables(ctx *validateContext, block *ast.BlockStmt) {
 	variableNames := make(map[string]bool)
 
@@ -62,6 +68,7 @@ func checkBlockForDuplicateVariables(ctx *validateContext, block *ast.BlockStmt)
 				ctx.errors = append(ctx.errors, errors.New("duplicate variable name in same block: "+s.Name))
 			} else {
 				variableNames[s.Name] = true
+				ctx.varTypes[s.Name] = s.Type
 			}
 		case *ast.BlockStmt:
 			// Recurse into nested blocks.

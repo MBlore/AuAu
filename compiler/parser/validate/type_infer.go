@@ -67,6 +67,21 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 		validateExprType(ctx, expectedType, e.Left)
 		validateExprType(ctx, expectedType, e.Right)
 		e.InferredType = expectedType
+	case *ast.IdentExpr:
+		// Types must match the declared type of the variable.
+		declType, ok := ctx.varTypes[e.Name]
+		if !ok {
+			ctx.errors = append(ctx.errors, fmt.Errorf("undefined variable: %s", e.Name))
+			return
+		}
+
+		if declType.Kind != expectedType.Kind {
+			ctx.errors = append(
+				ctx.errors,
+				fmt.Errorf("type mismatch: expected %s, got %s",
+					ast.TypeKindToString(expectedType.Kind),
+					ast.TypeKindToString(declType.Kind)))
+		}
 	default:
 		panic(fmt.Sprintf("unexpected expression type %T in validateExprType", expr))
 	}

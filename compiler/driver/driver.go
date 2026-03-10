@@ -9,6 +9,7 @@ import (
 	"github.com/MBlore/AuAu/ir"
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/parser"
+	"github.com/MBlore/AuAu/parser/validate"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -100,6 +101,15 @@ func Run(args []string) {
 	err = os.WriteFile("ast.txt", []byte(astStr), 0644)
 	if err != nil {
 		fmt.Printf("Error writing AST to file: %s\n", err)
+		return
+	}
+
+	// Semantic checks.
+	validationErrors := validate.Validate(pr.File)
+	if len(validationErrors) > 0 {
+		for _, err := range validationErrors {
+			fmt.Println(colorize("error ", ansiRed) + err.Error())
+		}
 		return
 	}
 

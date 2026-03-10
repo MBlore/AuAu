@@ -1,6 +1,8 @@
 package x64
 
 import (
+	"fmt"
+
 	"github.com/MBlore/AuAu/ir"
 )
 
@@ -85,4 +87,21 @@ func regForType(reg string, t ir.Type) string {
 	}
 
 	panic("unsupported register " + reg)
+}
+
+// sizedMem returns the appropriate memory operand string for a given IR type, including the correct size prefix (byte, word, dword, qword).
+// This is NASM syntax for memory operands, e.g. "byte [rbp-8]" or "dword [rbp-16]".
+func sizedMem(operand string, t ir.Type) string {
+	switch bitSize(t) {
+	case 8:
+		return "byte " + operand
+	case 16:
+		return "word " + operand
+	case 32:
+		return "dword " + operand
+	case 64:
+		return "qword " + operand
+	default:
+		panic(fmt.Sprintf("unsupported memory width: %d", bitSize(t)))
+	}
 }
