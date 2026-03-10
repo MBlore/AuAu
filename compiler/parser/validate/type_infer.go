@@ -49,7 +49,7 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 
 		e.InferredType = expectedType
 	case *ast.UnaryExpr:
-		if e.Op != token.Minus {
+		if e.Op != token.Sub {
 			return
 		}
 
@@ -67,11 +67,52 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 		lit.InferredType = expectedType
 		e.InferredType = expectedType
 	case *ast.BinaryExpr:
-		// TODO: Validate operators are valid for the types.
-		// For binary expressions, we need to validate both sides.
-		validateExprType(ctx, expectedType, e.Left)
-		validateExprType(ctx, expectedType, e.Right)
-		e.InferredType = expectedType
+		switch e.Op {
+		case token.EqEq, token.NotEq:
+			if expectedType.Kind != ast.TypeBool {
+				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
+					ast.TypeKindToString(expectedType.Kind)))
+			}
+
+			operandType := inferComparisonOperandType(ctx, e.Left, e.Right)
+
+			validateExprType(ctx, operandType, e.Left)
+			validateExprType(ctx, operandType, e.Right)
+
+			e.InferredType = ast.TypeBoolRef
+		case token.Add, token.Sub, token.Mul, token.Div:
+			// For binary expressions, we need to validate both sides.
+			validateExprType(ctx, expectedType, e.Left)
+			validateExprType(ctx, expectedType, e.Right)
+
+			e.InferredType = expectedType
+		case token.Lt, token.LtEq, token.Gt, token.GtEq:
+			// Check expected type is valid for comparison operators.
+			if expectedType.Kind != ast.TypeBool {
+				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
+					ast.TypeKindToString(expectedType.Kind)))
+			}
+
+			operandType := inferComparisonOperandType(ctx, e.Left, e.Right)
+
+			if !isIntegerType(operandType) {
+				ctx.errors = append(ctx.errors, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op)))
+				return
+			}
+
+			// Comparison operators always result in a bool type.
+			validateExprType(ctx, operandType, e.Left)
+			validateExprType(ctx, operandType, e.Right)
+
+			e.InferredType = ast.TypeBoolRef
+		default:
+			panic(fmt.Sprintf("unexpected binary operator %s", e.Op))
+		}
+	case *ast.BoolLiteralExpr:
+		if expectedType.Kind != ast.TypeBool {
+			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
+				ast.TypeKindToString(expectedType.Kind)))
+		}
 	case *ast.IdentExpr:
 		// Types must match the declared type of the variable.
 		declType, ok := ctx.varTypes[e.Name]
@@ -155,4 +196,51 @@ func literalFitsType(lit *ast.IntLiteralExpr, negative bool, target *ast.TypeRef
 		return fmt.Errorf("integer literal %s out of range for %s", lit.Literal, b.name)
 	}
 	return nil
+}
+
+// inferComparisonOperandType checks the left and right expressions of a comparison operator to see if either has a known type, and returns that type if so. If neither has a known type, it defaults to int.
+func inferComparisonOperandType(ctx *validateContext, left, right ast.Expr) *ast.TypeRef {
+	if t := exprKnownType(ctx, left); t != nil {
+		return t
+	}
+	if t := exprKnownType(ctx, right); t != nil {
+		return t
+	}
+
+	return ast.TypeIntRef
+}
+
+// exprKnownType checks if the expression is a literal or identifier with a known type, and returns that type if so.
+func exprKnownType(ctx *validateContext, expr ast.Expr) *ast.TypeRef {
+	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		return ctx.varTypes[e.Name]
+	case *ast.IntLiteralExpr:
+		return e.InferredType
+	case *ast.UnaryExpr:
+		return e.InferredType
+	case *ast.BinaryExpr:
+		return e.InferredType
+	case *ast.BoolLiteralExpr:
+		return ast.TypeBoolRef
+	case *ast.StringLiteralExpr:
+		return ast.TypeStringRef
+	default:
+		return nil
+	}
+}
+
+func isIntegerType(t *ast.TypeRef) bool {
+	if t == nil {
+		return false
+	}
+
+	switch t.Kind {
+	case ast.TypeInt, ast.TypeInt64, ast.TypeInt32, ast.TypeInt16, ast.TypeInt8,
+		ast.TypeUInt64, ast.TypeUInt32, ast.TypeUInt16, ast.TypeUInt8,
+		ast.TypeByte, ast.TypeRune:
+		return true
+	default:
+		return false
+	}
 }

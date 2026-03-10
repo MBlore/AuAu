@@ -49,29 +49,36 @@ const (
 	Extern   TokenType = "EXTERN"
 	Struct   TokenType = "STRUCT"
 
-	PlusPlus       TokenType = "++"
-	MinusMinus     TokenType = "--"
-	PlusAssign     TokenType = "+="
-	MinusAssign    TokenType = "-="
-	AsteriskAssign TokenType = "*="
-	SlashAssign    TokenType = "/="
+	// Compound assignment and increment/decrement.
+	AddAdd    TokenType = "++"
+	SubSub    TokenType = "--"
+	AddAssign TokenType = "+="
+	SubAssign TokenType = "-="
+	MulAssign TokenType = "*="
+	DivAssign TokenType = "/="
 
-	// Comparisons and logical.
-	Bang   TokenType = "!"
-	Tilde  TokenType = "~"
-	Amp    TokenType = "&"
-	Pipe   TokenType = "|"
-	Caret  TokenType = "^"
-	Shl    TokenType = "<<"
-	Shr    TokenType = ">>"
+	// Bitwise.
+	Bang  TokenType = "!"
+	Tilde TokenType = "~"
+	Amp   TokenType = "&"
+	Pipe  TokenType = "|"
+	Caret TokenType = "^"
+	Shl   TokenType = "<<"
+	Shr   TokenType = ">>"
+
+	// Logical.
 	AndAnd TokenType = "&&"
 	OrOr   TokenType = "||"
-	EqEq   TokenType = "=="
-	NotEq  TokenType = "!="
-	LT     TokenType = "<"
-	GT     TokenType = ">"
-	LE     TokenType = "<="
-	GE     TokenType = ">="
+
+	// Equality.
+	EqEq  TokenType = "=="
+	NotEq TokenType = "!="
+
+	// Relational.
+	Lt   TokenType = "<"
+	Gt   TokenType = ">"
+	LtEq TokenType = "<="
+	GtEq TokenType = ">="
 
 	LBrace    TokenType = "{"
 	RBrace    TokenType = "}"
@@ -83,10 +90,10 @@ const (
 	Dot       TokenType = "."
 	Equals    TokenType = "="
 	Semicolon TokenType = ";"
-	Plus      TokenType = "+"
-	Minus     TokenType = "-"
-	Asterisk  TokenType = "*"
-	Slash     TokenType = "/"
+	Add       TokenType = "+"
+	Sub       TokenType = "-"
+	Mul       TokenType = "*"
+	Div       TokenType = "/"
 	Percent   TokenType = "%"
 )
 

@@ -17,7 +17,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 	b.WriteString("default rel\n")
 	b.WriteString("extern SetConsoleOutputCP\n")
 	b.WriteString("extern printf\n")
-	b.WriteString("section .rdata\n")
+	b.WriteString("\nsection .rdata\n")
 	b.WriteString("  fmt_int db \"%lld\", 10, 0\n")
 
 	// Collect all string constants.
@@ -53,7 +53,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 		}
 	}
 
-	b.WriteString("section .text\n")
+	b.WriteString("\nsection .text\n")
 
 	// Compile each function in the program.
 	for _, fn := range program.Functions {
@@ -97,14 +97,58 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 // emitOpCode emits the assembly code for a given IR instruction based on its OpCode.
 func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabels map[*ir.Instr]string) {
 	switch instr.Op {
+	case ir.OpCmp:
+		operandType := valueType(frame, instr.Args[0])
+
+		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+		fmt.Fprintf(b, "  mov rcx, %s\n", slot(frame, instr.Args[1]))
+		fmt.Fprintf(b, "  cmp %s, %s\n", regForType("rax", operandType), regForType("rcx", operandType))
+
+		switch instr.Cmp {
+		case ir.CmpEq:
+			fmt.Fprintf(b, "  sete al\n")
+		case ir.CmpNotEq:
+			fmt.Fprintf(b, "  setne al\n")
+		case ir.CmpLt:
+			if isSigned(operandType) {
+				fmt.Fprintf(b, "  setl al\n")
+			} else {
+				fmt.Fprintf(b, "  setb al\n")
+			}
+		case ir.CmpLtEq:
+			if isSigned(operandType) {
+				fmt.Fprintf(b, "  setle al\n")
+			} else {
+				fmt.Fprintf(b, "  setbe al\n")
+			}
+		case ir.CmpGt:
+			if isSigned(operandType) {
+				fmt.Fprintf(b, "  setg al\n")
+			} else {
+				fmt.Fprintf(b, "  seta al\n")
+			}
+		case ir.CmpGtEq:
+			if isSigned(operandType) {
+				fmt.Fprintf(b, "  setge al\n")
+			} else {
+				fmt.Fprintf(b, "  setae al\n")
+			}
+		default:
+			panic(fmt.Sprintf("unsupported cmp kind: %d", instr.Cmp))
+		}
+
+		fmt.Fprintf(b, "  movzx eax, al\n") // Zero-extend the result to 64 bits in RAX.
+		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
 	case ir.OpStringConst:
 		label := stringLabels[instr]
 
+		fmt.Fprintf(b, "  ; String constant: %s\n", label)
 		fmt.Fprintf(b, "  mov rax, %s\n", label)
 		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0)) // ptr
 
 		fmt.Fprintf(b, "  mov rax, %d\n", len(instr.Data))
 		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8)) // len
+		fmt.Fprintf(b, "  ; End string constant: %s\n", label)
 	case ir.OpPrint:
 		// Call printf with the value in RAX.
 		fmt.Fprintf(b, "  mov rcx, fmt_int\n")
@@ -268,6 +312,8 @@ func emitCanonicalizeRAX(b *bytes.Buffer, instr *ir.Instr) {
 		fmt.Fprintf(b, "  movsxd rax, eax\n")
 	case ir.TypeU32:
 		fmt.Fprintf(b, "  mov eax, eax\n")
+	case ir.TypeBool:
+		fmt.Fprintf(b, "  movzx eax, al\n")
 	default:
 		panic(fmt.Sprintf("unsupported type: %d", instr.Type.Kind))
 	}
@@ -289,7 +335,7 @@ func emitLoadIntoRAX(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 		fmt.Fprintf(b, "  movzx eax, word %s\n", slot(frame, instr.Args[0]))
 	case ir.TypeI8:
 		fmt.Fprintf(b, "  movsx rax, byte %s\n", slot(frame, instr.Args[0]))
-	case ir.TypeU8:
+	case ir.TypeU8, ir.TypeBool:
 		fmt.Fprintf(b, "  movzx eax, byte %s\n", slot(frame, instr.Args[0]))
 	default:
 		panic(fmt.Sprintf("unsupported load type: %d", instr.Type.Kind))
@@ -341,7 +387,7 @@ func stackSize(t ir.Type) int {
 		return 16
 	case ir.TypeI8, ir.TypeI16, ir.TypeI32, ir.TypeI64,
 		ir.TypeU8, ir.TypeU16, ir.TypeU32, ir.TypeU64,
-		ir.TypePtr:
+		ir.TypePtr, ir.TypeBool:
 		return 8
 	default:
 		panic("unsupported type kind")
@@ -360,6 +406,7 @@ func opCodeProducesValue(op ir.OpCode) bool {
 		ir.OpLoad,
 		ir.OpAlloc,
 		ir.OpNeg,
+		ir.OpCmp,
 		ir.OpStringConst:
 		return true
 	default:

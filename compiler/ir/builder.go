@@ -181,3 +181,22 @@ func (b *Builder) Print(val IRValue) {
 
 	b.current.Instrs = append(b.current.Instrs, instr)
 }
+
+// Cmp creates a new comparison instruction and returns the result of the comparison.
+func (b *Builder) Cmp(kind CmpKind, l, r IRValue) IRValue {
+	b.ensureBlock()
+
+	dest := b.NewValue()
+
+	instr := &Instr{
+		Op:   OpCmp,
+		Dest: dest,
+		Type: Type{Kind: TypeBool},
+		Args: []IRValue{l, r},
+		Cmp:  kind,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+
+	return dest
+}

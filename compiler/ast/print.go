@@ -29,7 +29,7 @@ func (p *AstPrinter) Print() string {
 }
 
 func (p *AstPrinter) printFuncDecl(f *FuncDecl) {
-	fmt.Fprintf(&p.buff, "%sfunc %s(", p.prefix(), f.Name)
+	fmt.Fprintf(&p.buff, "%sFuncDecl %s(", p.prefix(), f.Name)
 
 	for i, param := range f.Params {
 		p.buff.WriteString(TypeKindToString(param.Type.Kind) + " " + param.Name)
@@ -44,6 +44,7 @@ func (p *AstPrinter) printFuncDecl(f *FuncDecl) {
 }
 
 func (p *AstPrinter) printBlock(block *BlockStmt) {
+	fmt.Fprintf(&p.buff, "%sBlockStmt\n", p.prefix())
 	p.indentLevel++
 	for _, stmt := range block.Stmts {
 		p.printStmt(stmt)
@@ -60,17 +61,17 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		}
 	case *ReturnStmt:
 		if s.ReturnExpr != nil {
-			fmt.Fprintf(&p.buff, "%sreturn\n", p.prefix())
+			fmt.Fprintf(&p.buff, "%sReturnStmt\n", p.prefix())
 			p.printExpr(s.ReturnExpr, p.indentLevel+1)
 		} else {
-			fmt.Fprintf(&p.buff, "%sreturn\n", p.prefix())
+			fmt.Fprintf(&p.buff, "%sReturnStmt\n", p.prefix())
 		}
 	case *VarDeclStmt:
 		if s.Init != nil {
-			fmt.Fprintf(&p.buff, "%svar %s %s = \n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s = \n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
 			p.printExpr(s.Init, p.indentLevel+1)
 		} else {
-			fmt.Fprintf(&p.buff, "%svar %s %s\n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s\n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
 		}
 	}
 }
@@ -80,21 +81,21 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 
 	switch e := expr.(type) {
 	case *IdentExpr:
-		fmt.Fprintf(&p.buff, "%sIdent(%s)\n", pad, e.Name)
+		fmt.Fprintf(&p.buff, "%sIdentExpr(%s)\n", pad, e.Name)
 	case *IntLiteralExpr:
-		fmt.Fprintf(&p.buff, "%sInt(%s)\n", pad, e.Literal)
+		fmt.Fprintf(&p.buff, "%sIntLiteralExpr(%s)\n", pad, e.Literal)
 	case *UnaryExpr:
-		fmt.Fprintf(&p.buff, "%sUnary(%s)\n", pad, TokenTypeToString(e.Op))
+		fmt.Fprintf(&p.buff, "%sUnaryExpr(%s)\n", pad, TokenTypeToString(e.Op))
 		p.printExpr(e.Expr, indent+1)
 	case *BinaryExpr:
-		fmt.Fprintf(&p.buff, "%sBinary(%s)\n", pad, TokenTypeToString(e.Op))
+		fmt.Fprintf(&p.buff, "%sBinaryExpr(%s)\n", pad, TokenTypeToString(e.Op))
 
 		p.printExpr(e.Left, indent+1)
 		p.printExpr(e.Right, indent+1)
 	case *BoolLiteralExpr:
-		fmt.Fprintf(&p.buff, "%sBool(%t)\n", pad, e.Value)
+		fmt.Fprintf(&p.buff, "%sBoolLiteralExpr(%t)\n", pad, e.Value)
 	case *StringLiteralExpr:
-		fmt.Fprintf(&p.buff, "%sString(%s)\n", pad, e.Value)
+		fmt.Fprintf(&p.buff, "%sStringLiteralExpr(%s)\n", pad, e.Value)
 	default:
 		fmt.Fprintf(&p.buff, "%sUnknownExpr(%T)\n", pad, e)
 	}

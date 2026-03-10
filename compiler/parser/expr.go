@@ -77,7 +77,7 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 			return nil, fmt.Errorf("expected ')' after expression: %w", err)
 		}
 		return expr, nil
-	case token.Minus:
+	case token.Sub:
 		p.advance()
 
 		bp := prefixBindingPower(tok.Type)
@@ -126,10 +126,18 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 // infixBindingPower returns the binding power of an infix operator for Pratt parsing.
 func infixBindingPower(op token.TokenType) int {
 	switch op {
-	case token.Asterisk, token.Slash:
-		return 20
-	case token.Plus, token.Minus:
+	case token.OrOr:
+		return 5
+	case token.AndAnd:
 		return 10
+	case token.EqEq, token.NotEq:
+		return 15
+	case token.Lt, token.LtEq, token.Gt, token.GtEq:
+		return 20
+	case token.Add, token.Sub:
+		return 30
+	case token.Mul, token.Div:
+		return 40
 	}
 
 	// Not an infix operator.
@@ -139,7 +147,7 @@ func infixBindingPower(op token.TokenType) int {
 // prefixBindingPower returns the binding power of a prefix operator for Pratt parsing.
 func prefixBindingPower(op token.TokenType) int {
 	switch op {
-	case token.Minus:
+	case token.Sub:
 		return 30
 	}
 

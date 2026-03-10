@@ -27,6 +27,8 @@ func bitSize(t ir.Type) int {
 		return 8
 	case ir.TypePtr:
 		return 64
+	case ir.TypeBool:
+		return 8
 	default:
 		panic("unsupported type kind")
 	}
@@ -36,7 +38,7 @@ func isSigned(t ir.Type) bool {
 	switch t.Kind {
 	case ir.TypeI64, ir.TypeI32, ir.TypeI16, ir.TypeI8:
 		return true
-	case ir.TypeU64, ir.TypeU32, ir.TypeU16, ir.TypeU8, ir.TypePtr:
+	case ir.TypeU64, ir.TypeU32, ir.TypeU16, ir.TypeU8, ir.TypePtr, ir.TypeBool:
 		return false
 	default:
 		panic("unsupported type kind")
@@ -53,7 +55,7 @@ func regForType(reg string, t ir.Type) string {
 			return "eax"
 		case ir.TypeI16, ir.TypeU16:
 			return "ax"
-		case ir.TypeI8, ir.TypeU8:
+		case ir.TypeI8, ir.TypeU8, ir.TypeBool:
 			return "al"
 		default:
 			panic("unsupported type kind")
@@ -66,7 +68,7 @@ func regForType(reg string, t ir.Type) string {
 			return "ecx"
 		case ir.TypeI16, ir.TypeU16:
 			return "cx"
-		case ir.TypeI8, ir.TypeU8:
+		case ir.TypeI8, ir.TypeU8, ir.TypeBool:
 			return "cl"
 		default:
 			panic("unsupported type kind")
@@ -79,7 +81,7 @@ func regForType(reg string, t ir.Type) string {
 			return "edx"
 		case ir.TypeI16, ir.TypeU16:
 			return "dx"
-		case ir.TypeI8, ir.TypeU8:
+		case ir.TypeI8, ir.TypeU8, ir.TypeBool:
 			return "dl"
 		default:
 			panic("unsupported type kind")

@@ -21,6 +21,17 @@ type Type struct {
 	Elem *Type
 }
 
+type CmpKind int
+
+const (
+	CmpEq CmpKind = iota
+	CmpNotEq
+	CmpLt
+	CmpLtEq
+	CmpGt
+	CmpGtEq
+)
+
 type IRProgram struct {
 	Functions []*Function
 }
@@ -61,6 +72,7 @@ type Instr struct {
 	// For OpConst, the constant value is stored here.
 	Const uint64
 	Data  []byte
+	Cmp   CmpKind
 }
 
 type Function struct {

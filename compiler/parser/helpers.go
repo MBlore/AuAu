@@ -13,8 +13,10 @@ func (p *Parser) isExprStart(t token.TokenType) bool {
 	case token.Ident,
 		token.Number,
 		token.LParen,
-		token.Minus,
+		token.Sub,
 		token.Float,
+		token.True,
+		token.False,
 		token.String:
 		return true
 	default:

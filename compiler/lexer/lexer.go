@@ -75,19 +75,64 @@ func (l *Lexer) nextToken() (token.Token, error) {
 	switch ch {
 	case '+':
 		l.advance()
-		return token.Token{Type: token.Plus, Literal: "+", Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.Add, Literal: "+", Line: startLine, Col: startCol}, nil
 	case '-':
 		l.advance()
-		return token.Token{Type: token.Minus, Literal: "-", Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.Sub, Literal: "-", Line: startLine, Col: startCol}, nil
 	case '*':
 		l.advance()
-		return token.Token{Type: token.Asterisk, Literal: "*", Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.Mul, Literal: "*", Line: startLine, Col: startCol}, nil
 	case '/':
 		l.advance()
-		return token.Token{Type: token.Slash, Literal: "/", Line: startLine, Col: startCol}, nil
+		return token.Token{Type: token.Div, Literal: "/", Line: startLine, Col: startCol}, nil
 	case '=':
+		if l.peekAhead(1) == '=' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.EqEq, Literal: "==", Line: startLine, Col: startCol}, nil
+		}
 		l.advance()
 		return token.Token{Type: token.Equals, Literal: "=", Line: startLine, Col: startCol}, nil
+	case '!':
+		if l.peekAhead(1) == '=' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.NotEq, Literal: "!=", Line: startLine, Col: startCol}, nil
+		}
+		l.advance()
+		return token.Token{Type: token.Bang, Literal: "!", Line: startLine, Col: startCol}, nil
+	case '<':
+		if l.peekAhead(1) == '=' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.LtEq, Literal: "<=", Line: startLine, Col: startCol}, nil
+		}
+		l.advance()
+		return token.Token{Type: token.Lt, Literal: "<", Line: startLine, Col: startCol}, nil
+	case '>':
+		if l.peekAhead(1) == '=' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.GtEq, Literal: ">=", Line: startLine, Col: startCol}, nil
+		}
+		l.advance()
+		return token.Token{Type: token.Gt, Literal: ">", Line: startLine, Col: startCol}, nil
+	case '&':
+		if l.peekAhead(1) == '&' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.AndAnd, Literal: "&&", Line: startLine, Col: startCol}, nil
+		}
+		l.advance()
+		return token.Token{Type: token.Amp, Literal: "&", Line: startLine, Col: startCol}, nil
+	case '|':
+		if l.peekAhead(1) == '|' {
+			l.advance()
+			l.advance()
+			return token.Token{Type: token.OrOr, Literal: "||", Line: startLine, Col: startCol}, nil
+		}
+		l.advance()
+		return token.Token{Type: token.Pipe, Literal: "|", Line: startLine, Col: startCol}, nil
 	case '(':
 		l.advance()
 		return token.Token{Type: token.LParen, Literal: "(", Line: startLine, Col: startCol}, nil

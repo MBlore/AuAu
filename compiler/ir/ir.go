@@ -141,7 +141,7 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
 	case *ast.BoolLiteralExpr:
-		return l.builder.Const(Type{Kind: TypeI8}, boolToInt(e.Value)), nil
+		return l.builder.Const(Type{Kind: TypeBool}, boolToInt(e.Value)), nil
 	case *ast.StringLiteralExpr:
 		strVal := l.builder.StringConst([]byte(e.Value))
 		return strVal, nil
@@ -171,7 +171,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		}
 
 		switch e.Op {
-		case token.Minus:
+		case token.Sub:
 			t := irTypeFromAstType(e.InferredType)
 			return l.builder.Neg(t, val), nil
 		default:
@@ -189,20 +189,31 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 			return 0, err
 		}
 
-		// Emit the binary operation instruction.
-		t := irTypeFromAstType(e.InferredType)
 		switch e.Op {
-		case token.Plus:
-			return l.builder.Add(t, left, right), nil
-		case token.Minus:
-			return l.builder.Sub(t, left, right), nil
-		case token.Asterisk:
-			return l.builder.Mul(t, left, right), nil
-		case token.Slash:
-			return l.builder.Div(t, left, right), nil
-		default:
-			return 0, fmt.Errorf("unsupported binary operator %s", e.Op)
+		case token.Add, token.Sub, token.Mul, token.Div:
+			// Emit the binary operation instruction.
+			t := irTypeFromAstType(e.InferredType)
+			switch e.Op {
+			case token.Add:
+				return l.builder.Add(t, left, right), nil
+			case token.Sub:
+				return l.builder.Sub(t, left, right), nil
+			case token.Mul:
+				return l.builder.Mul(t, left, right), nil
+			case token.Div:
+				return l.builder.Div(t, left, right), nil
+			}
+		case token.EqEq, token.NotEq, token.Lt, token.LtEq, token.Gt, token.GtEq:
+			// Emit a comparison instruction.
+			cmpKind, err := cmpKindFromToken(e.Op)
+			if err != nil {
+				return 0, err
+			}
+
+			return l.builder.Cmp(cmpKind, left, right), nil
 		}
+
+		return 0, fmt.Errorf("unsupported binary operator %s", ast.TokenTypeToString(e.Op))
 	default:
 		return 0, fmt.Errorf("unsupported expression type %T", e)
 	}
@@ -242,5 +253,25 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 		return Type{Kind: TypeBool}
 	default:
 		panic(fmt.Sprintf("unsupported AST type %T", astType))
+	}
+}
+
+// cmpKindFromToken converts an AST comparison operator token to a CmpKind.
+func cmpKindFromToken(tok token.TokenType) (CmpKind, error) {
+	switch tok {
+	case token.EqEq:
+		return CmpEq, nil
+	case token.NotEq:
+		return CmpNotEq, nil
+	case token.Lt:
+		return CmpLt, nil
+	case token.LtEq:
+		return CmpLtEq, nil
+	case token.Gt:
+		return CmpGt, nil
+	case token.GtEq:
+		return CmpGtEq, nil
+	default:
+		return 0, fmt.Errorf("unsupported comparison operator %s", ast.TokenTypeToString(tok))
 	}
 }

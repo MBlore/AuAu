@@ -6,14 +6,30 @@ import (
 
 func TokenTypeToString(t token.TokenType) string {
 	switch t {
-	case token.Plus:
+	case token.Add:
 		return "+"
-	case token.Asterisk:
+	case token.Mul:
 		return "*"
-	case token.Minus:
+	case token.Sub:
 		return "-"
-	case token.Slash:
+	case token.Div:
 		return "/"
+	case token.EqEq:
+		return "=="
+	case token.NotEq:
+		return "!="
+	case token.Lt:
+		return "<"
+	case token.LtEq:
+		return "<="
+	case token.Gt:
+		return ">"
+	case token.GtEq:
+		return ">="
+	case token.AndAnd:
+		return "&&"
+	case token.OrOr:
+		return "||"
 	}
 
 	return "Unknown"

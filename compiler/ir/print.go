@@ -25,6 +25,13 @@ func (p *IRProgram) String() string {
 // InstrToString converts an IR instruction to a human-readable string representation.
 func InstrToString(instr *Instr) string {
 	switch instr.Op {
+	case OpCmp:
+		return fmt.Sprintf("%s = cmp %s %s, %s",
+			printTypedValue(instr.Dest, instr.Type),
+			cmpKindToString(instr.Cmp),
+			printValue(instr.Args[0]),
+			printValue(instr.Args[1]),
+		)
 	case OpStringConst:
 		return fmt.Sprintf("%s = string const %q bytes=%v",
 			printTypedValue(instr.Dest, instr.Type),
@@ -140,5 +147,25 @@ func opToString(op OpCode) string {
 		return "string const"
 	default:
 		return fmt.Sprintf("<unknown op %d>", op)
+	}
+}
+
+// cmpKindToString converts a CmpKind to a human-readable string representation.
+func cmpKindToString(cmpKind CmpKind) string {
+	switch cmpKind {
+	case CmpEq:
+		return "eq"
+	case CmpNotEq:
+		return "neq"
+	case CmpLt:
+		return "lt"
+	case CmpLtEq:
+		return "lte"
+	case CmpGt:
+		return "gt"
+	case CmpGtEq:
+		return "gte"
+	default:
+		return fmt.Sprintf("<unknown cmp kind %d>", cmpKind)
 	}
 }
