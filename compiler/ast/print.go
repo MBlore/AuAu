@@ -93,6 +93,10 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 		p.printExpr(e.Right, indent+1)
 	case *BoolLiteralExpr:
 		fmt.Fprintf(&p.buff, "%sBool(%t)\n", pad, e.Value)
+	case *StringLiteralExpr:
+		fmt.Fprintf(&p.buff, "%sString(%s)\n", pad, e.Value)
+	default:
+		fmt.Fprintf(&p.buff, "%sUnknownExpr(%T)\n", pad, e)
 	}
 }
 

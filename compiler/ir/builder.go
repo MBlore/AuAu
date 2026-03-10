@@ -96,6 +96,21 @@ func (b *Builder) Const(tp Type, value uint64) IRValue {
 	return dest
 }
 
+func (b *Builder) StringConst(data []byte) IRValue {
+	b.ensureBlock()
+
+	dest := b.NewValue()
+	instr := &Instr{
+		Op:   OpStringConst,
+		Dest: dest,
+		Type: Type{Kind: TypeString},
+		Data: append([]byte(nil), data...), // make a copy of the data
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+	return dest
+}
+
 // Store creates a new store instruction to store a value at a given address.
 func (b *Builder) Store(addr IRValue, val IRValue) {
 	b.ensureBlock()

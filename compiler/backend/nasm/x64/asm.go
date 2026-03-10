@@ -18,7 +18,41 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 	b.WriteString("extern SetConsoleOutputCP\n")
 	b.WriteString("extern printf\n")
 	b.WriteString("section .rdata\n")
-	b.WriteString("fmt_int db \"%lld\", 10, 0\n")
+	b.WriteString("  fmt_int db \"%lld\", 10, 0\n")
+
+	// Collect all string constants.
+	stringLabels := map[*ir.Instr]string{}
+	nextStringID := 0
+
+	for _, fn := range program.Functions {
+		for _, block := range fn.Blocks {
+			for _, instr := range block.Instrs {
+				if instr.Op == ir.OpStringConst {
+					label := fmt.Sprintf("str%d", nextStringID)
+
+					// Record the label.
+					stringLabels[instr] = label
+					nextStringID++
+
+					// Write the literal data for this string constant.
+					fmt.Fprintf(&b, "  %s db ", label)
+					for i, byt := range instr.Data {
+						if i > 0 {
+							b.WriteString(", ")
+						}
+						fmt.Fprintf(&b, "%d", byt)
+					}
+
+					if len(instr.Data) == 0 {
+						b.WriteString("0")
+					}
+
+					b.WriteString("\n")
+				}
+			}
+		}
+	}
+
 	b.WriteString("section .text\n")
 
 	// Compile each function in the program.
@@ -44,7 +78,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 		// Write function body...
 		for _, block := range fn.Blocks {
 			for _, instr := range block.Instrs {
-				emitOpCode(&b, instr, frame)
+				emitOpCode(&b, instr, frame, stringLabels)
 			}
 		}
 
@@ -61,8 +95,16 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 }
 
 // emitOpCode emits the assembly code for a given IR instruction based on its OpCode.
-func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
+func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabels map[*ir.Instr]string) {
 	switch instr.Op {
+	case ir.OpStringConst:
+		label := stringLabels[instr]
+
+		fmt.Fprintf(b, "  mov rax, %s\n", label)
+		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0)) // ptr
+
+		fmt.Fprintf(b, "  mov rax, %d\n", len(instr.Data))
+		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8)) // len
 	case ir.OpPrint:
 		// Call printf with the value in RAX.
 		fmt.Fprintf(b, "  mov rcx, fmt_int\n")
@@ -82,9 +124,29 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 		}
 
 		storeType := *addrType.Elem
+
+		// Handle string save (ptr + len).
+		if storeType.Kind == ir.TypeString {
+			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 0))
+			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Args[0], 0))
+
+			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 8))
+			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Args[0], 8))
+			break
+		}
+
 		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[1]))
 		fmt.Fprintf(b, "  mov %s, %s\n", sizedMem(slot(frame, instr.Args[0]), storeType), regForType("rax", storeType))
 	case ir.OpLoad:
+		// Handle strings (ptr + len copy).
+		if instr.Type.Kind == ir.TypeString {
+			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[0], 0))
+			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0))
+			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[0], 8))
+			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8))
+			break
+		}
+
 		// Moves a value from one stack slot to another, via RAX.
 		emitLoadIntoRAX(b, instr, frame)
 		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
@@ -258,7 +320,7 @@ func buildStackFrame(fn *ir.Function) *stackFrame {
 		for _, instr := range block.Instrs {
 			if opCodeProducesValue(instr.Op) {
 				// Move offset first to skip where RBP lives.
-				offset += 8 // 64-bits per slot
+				offset += stackSize(instr.Type)
 
 				// Track the slot and type for this IRValue.
 				frame.slots[instr.Dest] = offset
@@ -272,6 +334,20 @@ func buildStackFrame(fn *ir.Function) *stackFrame {
 	return frame
 }
 
+// stackSize returns the size in bytes of the given IR type when stored on the stack.
+func stackSize(t ir.Type) int {
+	switch t.Kind {
+	case ir.TypeString:
+		return 16
+	case ir.TypeI8, ir.TypeI16, ir.TypeI32, ir.TypeI64,
+		ir.TypeU8, ir.TypeU16, ir.TypeU32, ir.TypeU64,
+		ir.TypePtr:
+		return 8
+	default:
+		panic("unsupported type kind")
+	}
+}
+
 // opCodeProducesValue returns true if the given OpCode produces a value that needs
 // to be stored in a stack slot.
 func opCodeProducesValue(op ir.OpCode) bool {
@@ -283,7 +359,8 @@ func opCodeProducesValue(op ir.OpCode) bool {
 		ir.OpConst,
 		ir.OpLoad,
 		ir.OpAlloc,
-		ir.OpNeg:
+		ir.OpNeg,
+		ir.OpStringConst:
 		return true
 	default:
 		return false
@@ -303,6 +380,12 @@ func align16(size int) int {
 func slot(frame *stackFrame, value ir.IRValue) string {
 	offset := frame.slots[value]
 	return fmt.Sprintf("[rbp-%d]", offset)
+}
+
+// slotField returns the assembly operand for a specific field within a struct stored in a stack slot.
+func slotField(frame *stackFrame, value ir.IRValue, fieldOffset int) string {
+	offset := frame.slots[value]
+	return fmt.Sprintf("[rbp-%d]", offset-fieldOffset)
 }
 
 // valueType returns the type of the given IRValue from the stack frame's type tracking.

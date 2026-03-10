@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -167,5 +168,73 @@ func TestBasicProgram(t *testing.T) {
 
 	if len(result.Tokens) != 26 {
 		t.Errorf("Expected 26 tokens, got %d.", len(result.Tokens))
+	}
+}
+
+func TestStringHexEscapeDoesNotSkipFollowingCharacter(t *testing.T) {
+	input := `package "A\x42C"`
+
+	lexer := NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	if len(result.Tokens) != 2 {
+		t.Fatalf("Expected 2 tokens, got %d", len(result.Tokens))
+	}
+
+	got := result.Tokens[1]
+	if got.Type != token.String {
+		t.Fatalf("Expected string token, got %s", got.Type)
+	}
+
+	if got.Literal != "ABC" {
+		t.Fatalf("Expected string literal %q, got %q", "ABC", got.Literal)
+	}
+
+	if !bytes.Equal(got.Bytes, []byte("ABC")) {
+		t.Fatalf("Expected bytes %v, got %v", []byte("ABC"), got.Bytes)
+	}
+}
+
+func TestStringLiteralPreservesUTF8Accent(t *testing.T) {
+	input := `package "hé"`
+
+	lexer := NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	got := result.Tokens[1]
+	if got.Literal != "hé" {
+		t.Fatalf("Expected string literal %q, got %q", "hé", got.Literal)
+	}
+
+	if !bytes.Equal(got.Bytes, []byte("hé")) {
+		t.Fatalf("Expected bytes %v, got %v", []byte("hé"), got.Bytes)
+	}
+}
+
+func TestStringLiteralPreservesUTF8Emoji(t *testing.T) {
+	input := `package "🙂"`
+
+	lexer := NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	got := result.Tokens[1]
+	if got.Literal != "🙂" {
+		t.Fatalf("Expected string literal %q, got %q", "🙂", got.Literal)
+	}
+
+	if !bytes.Equal(got.Bytes, []byte("🙂")) {
+		t.Fatalf("Expected bytes %v, got %v", []byte("🙂"), got.Bytes)
 	}
 }

@@ -132,6 +132,13 @@ type IntLiteralExpr struct {
 
 func (*IntLiteralExpr) isExpr() {}
 
+type StringLiteralExpr struct {
+	NodeMeta
+	Value string
+}
+
+func (*StringLiteralExpr) isExpr() {}
+
 type BoolLiteralExpr struct {
 	NodeMeta
 	Value bool

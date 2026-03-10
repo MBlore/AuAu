@@ -133,7 +133,14 @@ block0:
   store t111, t112
   t113:ptr<i64> = alloc
   t114:i64 = const 7
-  store t113, t114
-  t115:i64 = load t113
-  print t115
+  t115:i64 = const 5
+  t116:i64 = const 2
+  t117:i64 = mul t115, t116
+  t118:i64 = add t114, t117
+  store t113, t118
+  t119:i64 = load t113
+  print t119
+  t120:ptr<string> = alloc
+  t121:string = string const "Hello" bytes=[72 101 108 108 111]
+  store t120, t121
   ret

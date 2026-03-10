@@ -36,6 +36,11 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 
 	// Now we look for IntLiteralExpr in the expression graph and set their type to the inferred type.
 	switch e := expr.(type) {
+	case *ast.StringLiteralExpr:
+		if expectedType.Kind != ast.TypeString {
+			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got string",
+				ast.TypeKindToString(expectedType.Kind)))
+		}
 	case *ast.IntLiteralExpr:
 		if err := literalFitsType(e, false, expectedType); err != nil {
 			ctx.errors = append(ctx.errors, err)

@@ -12,6 +12,8 @@ const (
 	TypeU32
 	TypeU64
 	TypePtr
+	TypeString
+	TypeBool
 )
 
 type Type struct {
@@ -34,6 +36,7 @@ type OpCode int
 
 const (
 	OpConst OpCode = iota
+	OpStringConst
 	OpAdd
 	OpSub
 	OpMul
@@ -57,6 +60,7 @@ type Instr struct {
 	Args []IRValue
 	// For OpConst, the constant value is stored here.
 	Const uint64
+	Data  []byte
 }
 
 type Function struct {

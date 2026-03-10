@@ -140,6 +140,11 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
+	case *ast.BoolLiteralExpr:
+		return l.builder.Const(Type{Kind: TypeI8}, boolToInt(e.Value)), nil
+	case *ast.StringLiteralExpr:
+		strVal := l.builder.StringConst([]byte(e.Value))
+		return strVal, nil
 	case *ast.IdentExpr:
 		// Look up the variable name and emit a load from its address.
 		v, ok := l.vars[e.Name]
@@ -203,6 +208,13 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	}
 }
 
+func boolToInt(b bool) uint64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // irTypeFromAstType converts an AST type to an IR type.
 func irTypeFromAstType(astType *ast.TypeRef) Type {
 	switch t := astType.Kind; t {
@@ -224,6 +236,10 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 		return Type{Kind: TypeU32}
 	case ast.TypeUInt64:
 		return Type{Kind: TypeU64}
+	case ast.TypeString:
+		return Type{Kind: TypeString}
+	case ast.TypeBool:
+		return Type{Kind: TypeBool}
 	default:
 		panic(fmt.Sprintf("unsupported AST type %T", astType))
 	}

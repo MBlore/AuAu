@@ -3,6 +3,7 @@ package lexer
 import (
 	"errors"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/MBlore/AuAu/token"
 )
@@ -180,8 +181,79 @@ func (l *Lexer) readString() ([]byte, error) {
 			return out, nil
 		}
 
-		out = append(out, byte(ch))
+		if ch == '\\' {
+			l.advance() // skip backslash
+			esc := l.peek()
+			switch esc {
+			case 'n':
+				out = append(out, '\n')
+				l.advance()
+			case 'r':
+				out = append(out, '\r')
+				l.advance()
+			case 't':
+				out = append(out, '\t')
+				l.advance()
+			case '\\':
+				out = append(out, '\\')
+				l.advance()
+			case '"':
+				out = append(out, '"')
+				l.advance()
+			case '0':
+				out = append(out, 0)
+				l.advance()
+			case 'x':
+				// Hex escape sequence, e.g. \x41 for 'A'.
+				l.advance() // skip 'x'
+				hexDigits := make([]rune, 0, 2)
+				for range 2 {
+					hd := l.peek()
+					if !isHexDigit(hd) {
+						return nil, errors.New("invalid hex escape sequence: \\x must be followed by exactly 2 hex digits")
+					}
+
+					hexDigits = append(hexDigits, hd)
+					l.advance()
+				}
+
+				var hexValue byte
+				for _, hd := range hexDigits {
+					hexValue <<= 4
+					hexValue |= hexNibble(hd)
+				}
+
+				out = append(out, hexValue)
+				continue
+			default:
+				return nil, errors.New("invalid escape sequence: \\" + string(esc))
+			}
+			continue
+		}
+
+		var buf [utf8.UTFMax]byte
+		n := utf8.EncodeRune(buf[:], ch)
+		out = append(out, buf[:n]...)
 		l.advance()
+	}
+}
+
+// isHexDigit reports whether ch is an ASCII hexadecimal digit.
+func isHexDigit(ch rune) bool {
+	return ('0' <= ch && ch <= '9') ||
+		('a' <= ch && ch <= 'f') ||
+		('A' <= ch && ch <= 'F')
+}
+
+// hexNibble returns the 4-bit value of one ASCII hexadecimal digit.
+func hexNibble(ch rune) byte {
+	switch {
+	case '0' <= ch && ch <= '9':
+		return byte(ch - '0')
+	case 'a' <= ch && ch <= 'f':
+		return byte(ch-'a') + 10
+	default:
+		return byte(ch-'A') + 10
 	}
 }
 

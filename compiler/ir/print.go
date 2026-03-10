@@ -25,6 +25,12 @@ func (p *IRProgram) String() string {
 // InstrToString converts an IR instruction to a human-readable string representation.
 func InstrToString(instr *Instr) string {
 	switch instr.Op {
+	case OpStringConst:
+		return fmt.Sprintf("%s = string const %q bytes=%v",
+			printTypedValue(instr.Dest, instr.Type),
+			string(instr.Data),
+			instr.Data,
+		)
 	case OpPrint:
 		return fmt.Sprintf("print %s", printValue(instr.Args[0]))
 	case OpConst:
@@ -103,6 +109,10 @@ func printType(tp Type) string {
 			return "ptr<?>"
 		}
 		return fmt.Sprintf("ptr<%s>", printType(*tp.Elem))
+	case TypeString:
+		return "string"
+	case TypeBool:
+		return "bool"
 	default:
 		return "<invalid-type>"
 	}
@@ -126,6 +136,8 @@ func opToString(op OpCode) string {
 		return "div"
 	case OpNeg:
 		return "neg"
+	case OpStringConst:
+		return "string const"
 	default:
 		return fmt.Sprintf("<unknown op %d>", op)
 	}

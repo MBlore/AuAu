@@ -22,6 +22,8 @@ void main() {
     uint32 q = h
     uint64 r = i
 
-    int test = 7
+    int test = 7 + (5 * 2)
     print(test)
+
+    string testStr = "Hello"
 }

@@ -115,6 +115,9 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 	case token.True, token.False:
 		p.advance()
 		return &ast.BoolLiteralExpr{Value: tok.Type == token.True, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
+	case token.String:
+		p.advance()
+		return &ast.StringLiteralExpr{Value: tok.Literal, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
 	default:
 		return nil, errors.New("unexpected token, expected primary expression")
 	}
