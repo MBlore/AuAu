@@ -2,9 +2,11 @@ package lexer
 
 import (
 	"errors"
+	"fmt"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/MBlore/AuAu/diagnostics"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -40,7 +42,7 @@ func (l *Lexer) Lex() LexResult {
 
 		if tok.Type == token.Illegal {
 			// Illegal chars hard stop lexing.
-			errs = append(errs, errors.New("illegal character: "+tok.Literal))
+			errs = append(errs, diagnostics.WrapErrorAt(l.line, l.col, fmt.Errorf("illegal character: %s", tok.Literal)))
 			break
 		}
 

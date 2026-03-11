@@ -6,6 +6,7 @@ import (
 
 	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/backend/nasm/x64"
+	"github.com/MBlore/AuAu/diagnostics"
 	"github.com/MBlore/AuAu/ir"
 	"github.com/MBlore/AuAu/lexer"
 	"github.com/MBlore/AuAu/parser"
@@ -50,6 +51,8 @@ func Run(args []string) {
 		fmt.Printf("File not found: %s\n", filename)
 		return
 	}
+
+	diagnostics.SetSourceFile(filename)
 
 	fmt.Printf("Compiling %s...\n", filename)
 

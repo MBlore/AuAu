@@ -15,7 +15,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 
 	// Write header.
 	b.WriteString("default rel\n")
-	b.WriteString("extern SetConsoleOutputCP\n")
+	b.WriteString("extern au_rt_setconsoleoutput\n")
 	b.WriteString("extern printf\n")
 	b.WriteString("\nsection .rdata\n")
 	b.WriteString("  fmt_int db \"%lld\", 10, 0\n")
@@ -81,8 +81,7 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 
 				// Main sets the codepage to support unicode.
 				if fn.Name == "main" {
-					b.WriteString("  mov ecx, 65001 ; CP_UTF8\n")
-					b.WriteString("  call SetConsoleOutputCP\n")
+					b.WriteString("  call au_rt_setconsoleoutput\n")
 				}
 			}
 

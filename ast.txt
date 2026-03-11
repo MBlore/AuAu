@@ -1,38 +1,5 @@
 package main
 FuncDecl main() return=void public=false
 BlockStmt
-  ForStmt
-    Init:
-    VarDeclStmt i int = 
-      IntLiteralExpr(0)
-    Cond:
-      BinaryExpr(<)
-        IdentExpr(i)
-        IntLiteralExpr(5)
-    Post:
-    AssignStmt i =
-      BinaryExpr(+)
-        IdentExpr(i)
-        IntLiteralExpr(1)
-    Body:
-    BlockStmt
-      IfStmt
-        Cond:
-          BinaryExpr(==)
-            IdentExpr(i)
-            IntLiteralExpr(2)
-        Then:
-        BlockStmt
-          ContinueStmt
-      IfStmt
-        Cond:
-          BinaryExpr(==)
-            IdentExpr(i)
-            IntLiteralExpr(4)
-        Then:
-        BlockStmt
-          BreakStmt
-      CallStmt print
-        IdentExpr(i)
   CallStmt print
-    IntLiteralExpr(99)
+    IntLiteralExpr(1)

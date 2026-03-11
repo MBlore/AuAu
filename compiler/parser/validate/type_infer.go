@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/MBlore/AuAu/ast"
+	"github.com/MBlore/AuAu/diagnostics"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -14,56 +15,61 @@ func inferConstantTypes(ctx *validateContext) {
 	// From here, we need to walk all the function blocks, all the statements in each block,
 	// and all the expressions and literals in each statement, and infer types for any literals we find.
 	for _, fn := range ctx.file.Functions {
-		inferTypesInBlock(ctx, fn.Body)
+		inferTypesInBlock(ctx, fn.Body, make(map[string]*ast.TypeRef))
 	}
 }
 
-func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt) {
+func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt, scope map[string]*ast.TypeRef) {
+	localScope := cloneTypeScope(scope)
+
 	for _, stmt := range block.Stmts {
-		inferTypesInStmt(ctx, stmt)
+		inferTypesInStmt(ctx, stmt, localScope)
 	}
 }
 
 // inferTypesInStmt is used to infer types in statements that aren't blocks, such as else if statements.
-func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt) {
+func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast.TypeRef) {
 	switch s := stmt.(type) {
 	case *ast.CallStmt:
 		for _, arg := range s.Args {
-			inferExprDefaultType(ctx, arg)
+			inferExprDefaultType(ctx, scope, arg)
 		}
 	case *ast.VarDeclStmt:
 		if s.Init != nil {
-			validateExprType(ctx, s.Type, s.Init)
+			validateExprType(ctx, scope, s.Type, s.Init)
 		}
+		scope[s.Name] = s.Type
 	case *ast.IfStmt:
-		validateExprType(ctx, ast.TypeBoolRef, s.Cond)
-		inferTypesInBlock(ctx, s.Then)
+		validateExprType(ctx, scope, ast.TypeBoolRef, s.Cond)
+		inferTypesInBlock(ctx, s.Then, scope)
 		if s.Else != nil {
-			inferTypesInStmt(ctx, s.Else)
+			inferTypesInStmt(ctx, s.Else, cloneTypeScope(scope))
 		}
 	case *ast.BlockStmt:
-		inferTypesInBlock(ctx, s)
+		inferTypesInBlock(ctx, s, scope)
 	case *ast.WhileStmt:
-		validateExprType(ctx, ast.TypeBoolRef, s.Cond)
-		inferTypesInBlock(ctx, s.Body)
+		validateExprType(ctx, scope, ast.TypeBoolRef, s.Cond)
+		inferTypesInBlock(ctx, s.Body, scope)
 	case *ast.ForStmt:
+		loopScope := cloneTypeScope(scope)
+
 		if s.Init != nil {
-			inferTypesInStmt(ctx, s.Init)
+			inferTypesInStmt(ctx, s.Init, loopScope)
 		}
 		if s.Cond != nil {
-			validateExprType(ctx, ast.TypeBoolRef, s.Cond)
+			validateExprType(ctx, loopScope, ast.TypeBoolRef, s.Cond)
 		}
 		if s.Body != nil {
-			inferTypesInBlock(ctx, s.Body)
+			inferTypesInBlock(ctx, s.Body, loopScope)
 		}
 		if s.Post != nil {
-			inferTypesInStmt(ctx, s.Post)
+			inferTypesInStmt(ctx, s.Post, loopScope)
 		}
 	}
 }
 
 // validateExprType ensures that the expression tree matches the expected type.
-func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.Expr) {
+func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expectedType *ast.TypeRef, expr ast.Expr) {
 	// We know from the declaration type what the expression should be,
 	// but have to verify the literal will fit in that type and set the literal's type accordingly.
 
@@ -71,8 +77,8 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 	switch e := expr.(type) {
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
-			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got string",
-				ast.TypeKindToString(expectedType.Kind)))
+			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got string",
+				ast.TypeKindToString(expectedType.Kind))))
 		}
 	case *ast.IntLiteralExpr:
 		if err := literalFitsType(e, false, expectedType); err != nil {
@@ -103,39 +109,39 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 		switch e.Op {
 		case token.EqEq, token.NotEq:
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
-					ast.TypeKindToString(expectedType.Kind)))
+				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
+					ast.TypeKindToString(expectedType.Kind))))
 			}
 
-			operandType := inferComparisonOperandType(ctx, e.Left, e.Right)
+			operandType := inferComparisonOperandType(scope, e.Left, e.Right)
 
-			validateExprType(ctx, operandType, e.Left)
-			validateExprType(ctx, operandType, e.Right)
+			validateExprType(ctx, scope, operandType, e.Left)
+			validateExprType(ctx, scope, operandType, e.Right)
 
 			e.InferredType = ast.TypeBoolRef
 		case token.Add, token.Sub, token.Mul, token.Div:
 			// For binary expressions, we need to validate both sides.
-			validateExprType(ctx, expectedType, e.Left)
-			validateExprType(ctx, expectedType, e.Right)
+			validateExprType(ctx, scope, expectedType, e.Left)
+			validateExprType(ctx, scope, expectedType, e.Right)
 
 			e.InferredType = expectedType
 		case token.Lt, token.LtEq, token.Gt, token.GtEq:
 			// Check expected type is valid for comparison operators.
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
-					ast.TypeKindToString(expectedType.Kind)))
+				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
+					ast.TypeKindToString(expectedType.Kind))))
 			}
 
-			operandType := inferComparisonOperandType(ctx, e.Left, e.Right)
+			operandType := inferComparisonOperandType(scope, e.Left, e.Right)
 
 			if !isIntegerType(operandType) {
-				ctx.errors = append(ctx.errors, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op)))
+				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op))))
 				return
 			}
 
 			// Comparison operators always result in a bool type.
-			validateExprType(ctx, operandType, e.Left)
-			validateExprType(ctx, operandType, e.Right)
+			validateExprType(ctx, scope, operandType, e.Left)
+			validateExprType(ctx, scope, operandType, e.Right)
 
 			e.InferredType = ast.TypeBoolRef
 		default:
@@ -143,23 +149,24 @@ func validateExprType(ctx *validateContext, expectedType *ast.TypeRef, expr ast.
 		}
 	case *ast.BoolLiteralExpr:
 		if expectedType.Kind != ast.TypeBool {
-			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch: expected %s, got bool",
-				ast.TypeKindToString(expectedType.Kind)))
+			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
+				ast.TypeKindToString(expectedType.Kind))))
 		}
 	case *ast.IdentExpr:
 		// Types must match the declared type of the variable.
-		declType, ok := ctx.varTypes[e.Name]
+		declType, ok := scope[e.Name]
 		if !ok {
-			ctx.errors = append(ctx.errors, fmt.Errorf("undefined variable: %s", e.Name))
+			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("undefined variable: %s", e.Name)))
 			return
 		}
 
 		if declType.Kind != expectedType.Kind {
 			ctx.errors = append(
 				ctx.errors,
-				fmt.Errorf("type mismatch: expected %s, got %s",
-					ast.TypeKindToString(expectedType.Kind),
-					ast.TypeKindToString(declType.Kind)))
+				diagnostics.WrapError(e.NodeMeta,
+					fmt.Errorf("type mismatch: expected %s, got %s",
+						ast.TypeKindToString(expectedType.Kind),
+						ast.TypeKindToString(declType.Kind))))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected expression type %T in validateExprType", expr))
@@ -232,11 +239,11 @@ func literalFitsType(lit *ast.IntLiteralExpr, negative bool, target *ast.TypeRef
 }
 
 // inferComparisonOperandType checks the left and right expressions of a comparison operator to see if either has a known type, and returns that type if so. If neither has a known type, it defaults to int.
-func inferComparisonOperandType(ctx *validateContext, left, right ast.Expr) *ast.TypeRef {
-	if t := exprKnownType(ctx, left); t != nil {
+func inferComparisonOperandType(scope map[string]*ast.TypeRef, left, right ast.Expr) *ast.TypeRef {
+	if t := exprKnownType(scope, left); t != nil {
 		return t
 	}
-	if t := exprKnownType(ctx, right); t != nil {
+	if t := exprKnownType(scope, right); t != nil {
 		return t
 	}
 
@@ -244,10 +251,10 @@ func inferComparisonOperandType(ctx *validateContext, left, right ast.Expr) *ast
 }
 
 // exprKnownType checks if the expression is a literal or identifier with a known type, and returns that type if so.
-func exprKnownType(ctx *validateContext, expr ast.Expr) *ast.TypeRef {
+func exprKnownType(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
 	switch e := expr.(type) {
 	case *ast.IdentExpr:
-		return ctx.varTypes[e.Name]
+		return scope[e.Name]
 	case *ast.IntLiteralExpr:
 		return e.InferredType
 	case *ast.UnaryExpr:
@@ -280,20 +287,20 @@ func isIntegerType(t *ast.TypeRef) bool {
 
 // inferExprDefaultType is used to infer the default type of an expression when we don't have any other information about what type it should be.
 // This is used for literals and binary expressions where the type can be inferred from the context.
-func inferExprDefaultType(ctx *validateContext, expr ast.Expr) {
+func inferExprDefaultType(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) {
 	switch e := expr.(type) {
 	case *ast.StringLiteralExpr:
-		validateExprType(ctx, ast.TypeStringRef, e)
+		validateExprType(ctx, scope, ast.TypeStringRef, e)
 	case *ast.BoolLiteralExpr:
-		validateExprType(ctx, ast.TypeBoolRef, e)
+		validateExprType(ctx, scope, ast.TypeBoolRef, e)
 	case *ast.BinaryExpr:
 		switch e.Op {
 		case token.EqEq, token.NotEq, token.Lt, token.LtEq, token.Gt, token.GtEq:
-			validateExprType(ctx, ast.TypeBoolRef, e)
+			validateExprType(ctx, scope, ast.TypeBoolRef, e)
 		default:
-			validateExprType(ctx, ast.TypeIntRef, e)
+			validateExprType(ctx, scope, ast.TypeIntRef, e)
 		}
 	default:
-		validateExprType(ctx, ast.TypeIntRef, expr)
+		validateExprType(ctx, scope, ast.TypeIntRef, expr)
 	}
 }

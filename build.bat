@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 
 REM Check if vcvars64.bat exists.
 if not exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
@@ -37,20 +38,44 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
+REM Ensure bin folder exists.
+if not exist bin (
+    mkdir bin
+)
+
+REM Remove stale object files so renamed runtime sources do not leave duplicate symbols behind.
+del /q bin\*.obj >nul 2>&1
+
+REM Compile the runtime library.
+REM Iterate over all .c files in the runtime directory and compile them to object files.
+for %%f in (compiler\runtime\win64\*.c) do (
+    cl /nologo /MD /c %%f /Fo:bin\%%~nf.obj >nul
+    if %ERRORLEVEL% neq 0 (
+        echo Compilation of %%f failed.
+        exit /b %ERRORLEVEL%
+    )
+)
+
 REM Compile the assembly and link to executable.
-nasm -f win64 out.asm -o out.obj
+nasm -f win64 out.asm -o bin\out.obj
 if %ERRORLEVEL% neq 0 (
     echo NASM assembly failed.
     exit /b %ERRORLEVEL%
 )
 
-link /nologo out.obj ^
+REM Link all *.obj files in the bin folder.
+set OBJLIST=
+for %%f in (bin\*.obj) do (
+    set OBJLIST=!OBJLIST! bin\%%~nf.obj
+)
+
+echo Linking...
+link /nologo !OBJLIST! ^
     /SUBSYSTEM:CONSOLE ^
     /ENTRY:mainCRTStartup ^
     ucrt.lib vcruntime.lib msvcrt.lib legacy_stdio_definitions.lib ^
-    /OUT:out.exe
-
-if %ERRORLEVEL% neq 0 (
-    echo Linking failed.
-    exit /b %ERRORLEVEL%
-)
+    /OUT:bin\out.exe || (
+        echo Linking failed.
+        exit /b %ERRORLEVEL%
+    )
+echo Done. Output: bin\out.exe

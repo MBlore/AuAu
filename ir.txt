@@ -1,41 +1,5 @@
 func main:
 block0:
-  jmp block1(for_init)
-block1:
-  t0:ptr<i64> = alloc
-  t1:i64 = const 0
-  store t0, t1
-  jmp block2(for_cond)
-block2:
-  t2:i64 = load t0
-  t3:i64 = const 5
-  t4:bool = cmp lt t2, t3
-  br t4, block3(for_body), block5(for_end)
-block3:
-  t5:i64 = load t0
-  t6:i64 = const 2
-  t7:bool = cmp eq t5, t6
-  br t7, block6(then), block7(end)
-block4:
-  t12:i64 = load t0
-  t13:i64 = const 1
-  t14:i64 = add t12, t13
-  store t0, t14
-  jmp block2(for_cond)
-block5:
-  t15:i64 = const 99
-  print t15
+  t0:i64 = const 1
+  print t0
   ret
-block6:
-  jmp block4(for_post)
-block7:
-  t8:i64 = load t0
-  t9:i64 = const 4
-  t10:bool = cmp eq t8, t9
-  br t10, block8(then), block9(end)
-block8:
-  jmp block5(for_end)
-block9:
-  t11:i64 = load t0
-  print t11
-  jmp block4(for_post)

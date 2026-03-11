@@ -1,0 +1,9 @@
+- Type casts int64(x) int32(somevar)
+- Float data types
+- i++, i--, i += 10, i -= 10
+- Bitwise Ops, AND, OR, Shift etc.
+- "i++" didnt fail parsing.
+- Pointers int *p = &other
+- Structs
+- Function Calling
+- Arrays
