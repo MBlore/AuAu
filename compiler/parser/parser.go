@@ -126,10 +126,39 @@ func (p *Parser) parseBlock() (*ast.BlockStmt, error) {
 func (p *Parser) parseStatement() (ast.Stmt, error) {
 	tok := p.peek()
 	switch tok.Type {
+	case token.Break:
+		p.advance()
+		return &ast.BreakStmt{}, nil
+
+	case token.Continue:
+		p.advance()
+		return &ast.ContinueStmt{}, nil
+
+	case token.While:
+		return p.parseWhileStmt()
+
 	case token.If:
 		return p.parseIfStmt()
 
 	case token.Ident:
+		// Assign?
+		if p.peekAhead(1).Type == token.Equals {
+			varName := tok.Literal
+
+			p.advance()
+			p.advance()
+
+			initExpr, err := p.parseNewExpr()
+			if err != nil {
+				return nil, fmt.Errorf("invalid initializer expression in assignment statement: %w", err)
+			}
+
+			return &ast.AssignStmt{
+				Name:  varName,
+				Value: initExpr,
+			}, nil
+		}
+
 		// Function call?
 		if p.peekAhead(1).Type == token.LParen {
 			fc := &ast.CallStmt{
@@ -270,6 +299,25 @@ func (p *Parser) parseIfStmt() (ast.Stmt, error) {
 			Then: thenBlock,
 		}, nil
 	}
+}
+
+func (p *Parser) parseWhileStmt() (ast.Stmt, error) {
+	p.advance()
+
+	cond, err := p.parseNewExpr()
+	if err != nil {
+		return nil, fmt.Errorf("invalid condition expression in while statement: %w", err)
+	}
+
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, fmt.Errorf("invalid block in while statement: %w", err)
+	}
+
+	return &ast.WhileStmt{
+		Cond: cond,
+		Body: body,
+	}, nil
 }
 
 func (p *Parser) parseParamList() ([]ast.Param, error) {

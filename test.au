@@ -1,21 +1,11 @@
 package "main"
 
 void main() {
-    if 1 > 2 {
-        if 2 == 2 {
-            print(3)
-        }
-
+    int a = 20
+    while a > 10 {
         print(1)
-    } else {
-        print(2)
+        break
     }
 
-    if 1 == 2 {
-        print(10)
-    } else if 2 == 3 {
-        print(11)
-    } else {
-        print(12)
-    }
+    print(0)
 }

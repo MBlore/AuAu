@@ -82,6 +82,10 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		}
 	case *BlockStmt:
 		p.printBlock(s)
+	case *BreakStmt:
+		fmt.Fprintf(&p.buff, "%sBreakStmt\n", p.prefix())
+	case *ContinueStmt:
+		fmt.Fprintf(&p.buff, "%sContinueStmt\n", p.prefix())
 	}
 }
 

@@ -4,8 +4,10 @@ package validate
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/MBlore/AuAu/ast"
+	"github.com/MBlore/AuAu/token"
 )
 
 type validateContext struct {
@@ -26,6 +28,9 @@ func Validate(file *ast.File) []error {
 	ensureUniqueFunctionNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
 	inferConstantTypes(context)
+
+	// Check AssignStmt for type correctness, e.g. assigning an int to a string variable should be an error.
+	checkAssignStmts(context)
 
 	return context.errors
 }
@@ -136,5 +141,213 @@ func checkNestedStmtForDuplicateVariables(ctx *validateContext, stmt ast.Stmt) {
 
 	case *ast.VarDeclStmt:
 		ctx.varTypes[s.Name] = s.Type
+	}
+}
+
+func checkAssignStmts(ctx *validateContext) {
+	for _, fn := range ctx.file.Functions {
+		checkAssignStmtsInBlock(ctx, fn.Body, make(map[string]*ast.TypeRef))
+	}
+}
+
+func checkAssignStmtsInBlock(ctx *validateContext, block *ast.BlockStmt, scope map[string]*ast.TypeRef) {
+	localScope := cloneTypeScope(scope)
+
+	for _, stmt := range block.Stmts {
+		switch s := stmt.(type) {
+		case *ast.VarDeclStmt:
+			localScope[s.Name] = s.Type
+
+		case *ast.AssignStmt:
+			varType, ok := localScope[s.Name]
+			if !ok {
+				ctx.errors = append(ctx.errors, errors.New("assignment to undeclared variable: "+s.Name))
+				continue
+			}
+
+			validateAssignExprType(ctx, localScope, varType, s.Value)
+
+		case *ast.BlockStmt:
+			checkAssignStmtsInBlock(ctx, s, localScope)
+
+		case *ast.IfStmt:
+			checkAssignStmtsInBlock(ctx, s.Then, localScope)
+			if s.Else != nil {
+				checkNestedStmtForAssignStmts(ctx, s.Else, localScope)
+			}
+
+		case *ast.WhileStmt:
+			checkAssignStmtsInBlock(ctx, s.Body, localScope)
+
+		case *ast.ForStmt:
+			loopScope := cloneTypeScope(localScope)
+
+			if s.Init != nil {
+				checkNestedStmtForAssignStmts(ctx, s.Init, loopScope)
+			}
+			if s.Body != nil {
+				checkAssignStmtsInBlock(ctx, s.Body, loopScope)
+			}
+			if s.Post != nil {
+				checkNestedStmtForAssignStmts(ctx, s.Post, loopScope)
+			}
+		}
+	}
+}
+
+func checkNestedStmtForAssignStmts(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast.TypeRef) {
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		checkAssignStmtsInBlock(ctx, s, scope)
+
+	case *ast.IfStmt:
+		checkAssignStmtsInBlock(ctx, s.Then, scope)
+
+		if s.Else != nil {
+			checkNestedStmtForAssignStmts(ctx, s.Else, scope)
+		}
+
+	case *ast.WhileStmt:
+		checkAssignStmtsInBlock(ctx, s.Body, scope)
+
+	case *ast.ForStmt:
+		loopScope := cloneTypeScope(scope)
+		if s.Init != nil {
+			checkNestedStmtForAssignStmts(ctx, s.Init, loopScope)
+		}
+		if s.Body != nil {
+			checkAssignStmtsInBlock(ctx, s.Body, loopScope)
+		}
+		if s.Post != nil {
+			checkNestedStmtForAssignStmts(ctx, s.Post, loopScope)
+		}
+
+	case *ast.VarDeclStmt:
+		scope[s.Name] = s.Type
+
+	case *ast.AssignStmt:
+		varType, ok := scope[s.Name]
+		if !ok {
+			ctx.errors = append(ctx.errors, errors.New("assignment to undeclared variable: "+s.Name))
+			return
+		}
+
+		validateAssignExprType(ctx, scope, varType, s.Value)
+	}
+}
+
+func cloneTypeScope(scope map[string]*ast.TypeRef) map[string]*ast.TypeRef {
+	clone := make(map[string]*ast.TypeRef, len(scope))
+
+	for name, typ := range scope {
+		clone[name] = typ
+	}
+
+	return clone
+}
+
+func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expectedType *ast.TypeRef, expr ast.Expr) {
+	switch e := expr.(type) {
+	case *ast.StringLiteralExpr:
+		if expectedType.Kind != ast.TypeString {
+			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign string to %s",
+				ast.TypeToString(expectedType)))
+		}
+	case *ast.BoolLiteralExpr:
+		if expectedType.Kind != ast.TypeBool {
+			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
+				ast.TypeToString(expectedType)))
+		}
+	case *ast.IntLiteralExpr:
+		if err := literalFitsType(e, false, expectedType); err != nil {
+			ctx.errors = append(ctx.errors, err)
+			return
+		}
+		e.InferredType = expectedType
+	case *ast.UnaryExpr:
+		if e.Op != token.Sub {
+			return
+		}
+
+		lit, ok := e.Expr.(*ast.IntLiteralExpr)
+		if !ok {
+			return
+		}
+
+		if err := literalFitsType(lit, true, expectedType); err != nil {
+			ctx.errors = append(ctx.errors, err)
+			return
+		}
+
+		lit.InferredType = expectedType
+		e.InferredType = expectedType
+	case *ast.IdentExpr:
+		declType, ok := scope[e.Name]
+		if !ok {
+			ctx.errors = append(ctx.errors, fmt.Errorf("undefined variable: %s", e.Name))
+			return
+		}
+		if declType.Kind != expectedType.Kind {
+			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment to %s: cannot assign %s to %s",
+				e.Name, ast.TypeToString(declType), ast.TypeToString(expectedType)))
+		}
+	case *ast.BinaryExpr:
+		switch e.Op {
+		case token.Add, token.Sub, token.Mul, token.Div:
+			validateAssignExprType(ctx, scope, expectedType, e.Left)
+			validateAssignExprType(ctx, scope, expectedType, e.Right)
+			e.InferredType = expectedType
+		case token.EqEq, token.NotEq:
+			if expectedType.Kind != ast.TypeBool {
+				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
+					ast.TypeToString(expectedType)))
+			}
+			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+			validateAssignExprType(ctx, scope, operandType, e.Left)
+			validateAssignExprType(ctx, scope, operandType, e.Right)
+			e.InferredType = ast.TypeBoolRef
+		case token.Lt, token.LtEq, token.Gt, token.GtEq:
+			if expectedType.Kind != ast.TypeBool {
+				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
+					ast.TypeToString(expectedType)))
+			}
+			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+			if !isIntegerType(operandType) {
+				ctx.errors = append(ctx.errors, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op)))
+				return
+			}
+			validateAssignExprType(ctx, scope, operandType, e.Left)
+			validateAssignExprType(ctx, scope, operandType, e.Right)
+			e.InferredType = ast.TypeBoolRef
+		}
+	}
+}
+
+func inferComparisonOperandTypeForScope(scope map[string]*ast.TypeRef, left, right ast.Expr) *ast.TypeRef {
+	if t := exprKnownTypeForScope(scope, left); t != nil {
+		return t
+	}
+	if t := exprKnownTypeForScope(scope, right); t != nil {
+		return t
+	}
+	return ast.TypeIntRef
+}
+
+func exprKnownTypeForScope(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
+	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		return scope[e.Name]
+	case *ast.IntLiteralExpr:
+		return e.InferredType
+	case *ast.UnaryExpr:
+		return e.InferredType
+	case *ast.BinaryExpr:
+		return e.InferredType
+	case *ast.BoolLiteralExpr:
+		return ast.TypeBoolRef
+	case *ast.StringLiteralExpr:
+		return ast.TypeStringRef
+	default:
+		return nil
 	}
 }

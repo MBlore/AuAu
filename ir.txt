@@ -1,49 +1,23 @@
 func main:
 block0:
-  t0:i64 = const 1
-  t1:i64 = const 2
-  t2:bool = cmp gt t0, t1
-  br t2, block1(then), block2(else)
+  t0:ptr<i64> = alloc
+  t1:i64 = const 20
+  store t0, t1
+  jmp block1(while_cond)
 block1:
-  t3:i64 = const 2
-  t4:i64 = const 2
-  t5:bool = cmp eq t3, t4
-  br t5, block4(then), block5(end)
+  t2:i64 = load t0
+  t3:i64 = const 10
+  t4:bool = cmp gt t2, t3
+  br t4, block2(while_body), block3(while_end)
 block2:
-  t8:i64 = const 2
+  t5:i64 = load t0
+  t6:i64 = const 1
+  t7:i64 = sub t5, t6
+  store t0, t7
+  t8:i64 = const 1
   print t8
-  jmp block3(end)
+  jmp block1(while_cond)
 block3:
-  t9:i64 = const 1
-  t10:i64 = const 2
-  t11:bool = cmp eq t9, t10
-  br t11, block6(then), block7(else)
-block4:
-  t6:i64 = const 3
-  print t6
-  jmp block5(end)
-block5:
-  t7:i64 = const 1
-  print t7
-  jmp block3(end)
-block6:
-  t12:i64 = const 10
-  print t12
-  jmp block8(end)
-block7:
-  t13:i64 = const 2
-  t14:i64 = const 3
-  t15:bool = cmp eq t13, t14
-  br t15, block9(then), block10(else)
-block8:
+  t9:i64 = const 0
+  print t9
   ret
-block9:
-  t16:i64 = const 11
-  print t16
-  jmp block11(end)
-block10:
-  t17:i64 = const 12
-  print t17
-  jmp block11(end)
-block11:
-  jmp block8(end)

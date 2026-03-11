@@ -88,6 +88,49 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 
 func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 	switch s := stmt.(type) {
+	case *ast.AssignStmt:
+		// Emit instructions for the right-hand side expression.
+		val, err := l.emitExpr(s.Value)
+		if err != nil {
+			return fmt.Errorf("invalid expression in assignment: %w", err)
+		}
+
+		// Look up the variable's address.
+		v, ok := l.vars[s.Name]
+		if !ok {
+			return fmt.Errorf("undefined variable: %s", s.Name)
+		}
+
+		// Emit a store instruction to update the variable's value.
+		l.builder.Store(v.addr, val)
+
+	case *ast.WhileStmt:
+		condBlock := l.builder.NewBlock("while_cond")
+		bodyBlock := l.builder.NewBlock("while_body")
+		endBlock := l.builder.NewBlock("while_end")
+
+		l.builder.Jump(condBlock)
+		l.builder.SetBlock(condBlock)
+
+		condVal, err := l.emitExpr(s.Cond)
+		if err != nil {
+			return fmt.Errorf("invalid condition expression in while statement: %w", err)
+		}
+
+		l.builder.Branch(condVal, bodyBlock, endBlock)
+		l.builder.SetBlock(bodyBlock)
+
+		if err := l.emitBlock(s.Body); err != nil {
+			return err
+		}
+
+		// If the body doesn't end with a return or branch, add a jump back to the condition.
+		if !blockTerminated(l.builder.CurrentBlock()) {
+			l.builder.Jump(condBlock)
+		}
+
+		l.builder.SetBlock(endBlock)
+
 	case *ast.CallStmt:
 		// Emit instructions for the function call.
 		if s.FuncName == "print" {

@@ -198,3 +198,23 @@ type ForStmt struct {
 }
 
 func (*ForStmt) isStmt() {}
+
+type BreakStmt struct {
+	NodeMeta
+}
+
+func (*BreakStmt) isStmt() {}
+
+type ContinueStmt struct {
+	NodeMeta
+}
+
+func (*ContinueStmt) isStmt() {}
+
+type AssignStmt struct {
+	NodeMeta
+	Name  string
+	Value Expr
+}
+
+func (*AssignStmt) isStmt() {}
