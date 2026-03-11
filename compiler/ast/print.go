@@ -54,6 +54,41 @@ func (p *AstPrinter) printBlock(block *BlockStmt) {
 
 func (p *AstPrinter) printStmt(stmt Stmt) {
 	switch s := stmt.(type) {
+	case *AssignStmt:
+		fmt.Fprintf(&p.buff, "%sAssignStmt %s =\n", p.prefix(), s.Name)
+		p.printExpr(s.Value, p.indentLevel+1)
+	case *ForStmt:
+		fmt.Fprintf(&p.buff, "%sForStmt\n", p.prefix())
+		if s.Init != nil {
+			fmt.Fprintf(&p.buff, "%sInit:\n", strings.Repeat("  ", p.indentLevel+1))
+			p.indentLevel++
+			p.printStmt(s.Init)
+			p.indentLevel--
+		}
+		if s.Cond != nil {
+			fmt.Fprintf(&p.buff, "%sCond:\n", strings.Repeat("  ", p.indentLevel+1))
+			p.printExpr(s.Cond, p.indentLevel+2)
+		}
+		if s.Post != nil {
+			fmt.Fprintf(&p.buff, "%sPost:\n", strings.Repeat("  ", p.indentLevel+1))
+			p.indentLevel++
+			p.printStmt(s.Post)
+			p.indentLevel--
+		}
+		fmt.Fprintf(&p.buff, "%sBody:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.indentLevel++
+		p.printBlock(s.Body)
+		p.indentLevel--
+
+	case *WhileStmt:
+		fmt.Fprintf(&p.buff, "%sWhileStmt\n", p.prefix())
+		fmt.Fprintf(&p.buff, "%sCond:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.printExpr(s.Cond, p.indentLevel+2)
+		fmt.Fprintf(&p.buff, "%sBody:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.indentLevel++
+		p.printBlock(s.Body)
+		p.indentLevel--
+
 	case *CallStmt:
 		fmt.Fprintf(&p.buff, "%sCallStmt %s\n", p.prefix(), s.FuncName)
 		for _, arg := range s.Args {
@@ -75,10 +110,17 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		}
 	case *IfStmt:
 		fmt.Fprintf(&p.buff, "%sIfStmt\n", p.prefix())
-		p.printExpr(s.Cond, p.indentLevel+1)
+		fmt.Fprintf(&p.buff, "%sCond:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.printExpr(s.Cond, p.indentLevel+2)
+		fmt.Fprintf(&p.buff, "%sThen:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.indentLevel++
 		p.printBlock(s.Then)
+		p.indentLevel--
 		if s.Else != nil {
+			fmt.Fprintf(&p.buff, "%sElse:\n", strings.Repeat("  ", p.indentLevel+1))
+			p.indentLevel++
 			p.printStmt(s.Else)
+			p.indentLevel--
 		}
 	case *BlockStmt:
 		p.printBlock(s)
@@ -108,7 +150,7 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 	case *BoolLiteralExpr:
 		fmt.Fprintf(&p.buff, "%sBoolLiteralExpr(%t)\n", pad, e.Value)
 	case *StringLiteralExpr:
-		fmt.Fprintf(&p.buff, "%sStringLiteralExpr(%s)\n", pad, e.Value)
+		fmt.Fprintf(&p.buff, "%sStringLiteralExpr(%q)\n", pad, e.Value)
 	default:
 		fmt.Fprintf(&p.buff, "%sUnknownExpr(%T)\n", pad, e)
 	}

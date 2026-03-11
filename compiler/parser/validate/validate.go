@@ -27,10 +27,13 @@ func Validate(file *ast.File) []error {
 	ensurePackageDeclared(context)
 	ensureUniqueFunctionNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
+
 	inferConstantTypes(context)
 
 	// Check AssignStmt for type correctness, e.g. assigning an int to a string variable should be an error.
 	checkAssignStmts(context)
+
+	ensureLoopControlUsedInsideLoop(context)
 
 	return context.errors
 }

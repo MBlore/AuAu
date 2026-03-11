@@ -2,6 +2,53 @@ package main
 FuncDecl main() return=void public=false
 BlockStmt
   VarDeclStmt a int = 
-    IntLiteralExpr(20)
-  CallStmt print
     IntLiteralExpr(0)
+  WhileStmt
+    Cond:
+      BinaryExpr(<)
+        IdentExpr(a)
+        IntLiteralExpr(10)
+    Body:
+    BlockStmt
+      BreakStmt
+  CallStmt print
+    IntLiteralExpr(1)
+  VarDeclStmt b int = 
+    IntLiteralExpr(0)
+  WhileStmt
+    Cond:
+      BinaryExpr(<)
+        IdentExpr(b)
+        IntLiteralExpr(10)
+    Body:
+    BlockStmt
+      CallStmt print
+        UnaryExpr(-)
+          IntLiteralExpr(1)
+      AssignStmt b =
+        BinaryExpr(+)
+          IdentExpr(b)
+          IntLiteralExpr(1)
+      ContinueStmt
+  CallStmt print
+    IntLiteralExpr(2)
+  VarDeclStmt c int = 
+    IntLiteralExpr(0)
+  WhileStmt
+    Cond:
+      BinaryExpr(<)
+        IdentExpr(c)
+        IntLiteralExpr(10)
+    Body:
+    BlockStmt
+      WhileStmt
+        Cond:
+          BinaryExpr(<)
+            IdentExpr(c)
+            IntLiteralExpr(5)
+        Body:
+        BlockStmt
+          BreakStmt
+      BreakStmt
+  CallStmt print
+    IntLiteralExpr(3)

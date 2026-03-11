@@ -16,8 +16,13 @@ type varInfo struct {
 // Lowerer holds state for a single build file pass.
 type Lowerer struct {
 	builder *Builder
-	// vars maps variable names to their corresponding IR values.
-	vars map[string]varInfo
+
+	// scopes tracks block-local variable bindings from innermost to outermost.
+	scopes []map[string]varInfo
+
+	// loops is a stack used for entering and exiting loops,
+	// to help break/continue statements find the correct target blocks.
+	loops []loopContext
 }
 
 // CompileFile converts the AST to IR. This is a simple traversal that emits IR instructions based on the AST nodes.
@@ -43,7 +48,6 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 
 	l := &Lowerer{
 		builder: builder,
-		vars:    make(map[string]varInfo),
 	}
 
 	// We have to check if the main outer block of the function has a return.
@@ -77,6 +81,9 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 
 // emitBlock iterates over the statements in the given block and emits instructions.
 func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
+	l.pushScope()
+	defer l.popScope()
+
 	for _, stmt := range block.Stmts {
 		if err := l.emitStmt(stmt); err != nil {
 			return err
@@ -88,6 +95,22 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 
 func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 	switch s := stmt.(type) {
+	case *ast.BreakStmt:
+		loopCtx, ok := l.currentLoop()
+		if !ok {
+			return fmt.Errorf("break statement not inside a loop")
+		}
+
+		l.builder.Jump(loopCtx.breakBlock)
+
+	case *ast.ContinueStmt:
+		loopCtx, ok := l.currentLoop()
+		if !ok {
+			return fmt.Errorf("continue statement not inside a loop")
+		}
+
+		l.builder.Jump(loopCtx.continueBlock)
+
 	case *ast.AssignStmt:
 		// Emit instructions for the right-hand side expression.
 		val, err := l.emitExpr(s.Value)
@@ -96,7 +119,7 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 		}
 
 		// Look up the variable's address.
-		v, ok := l.vars[s.Name]
+		v, ok := l.lookupVar(s.Name)
 		if !ok {
 			return fmt.Errorf("undefined variable: %s", s.Name)
 		}
@@ -104,10 +127,16 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 		// Emit a store instruction to update the variable's value.
 		l.builder.Store(v.addr, val)
 
+	case *ast.ForStmt:
+		return l.emitForLoop(s)
+
 	case *ast.WhileStmt:
 		condBlock := l.builder.NewBlock("while_cond")
 		bodyBlock := l.builder.NewBlock("while_body")
 		endBlock := l.builder.NewBlock("while_end")
+
+		l.pushLoop(endBlock, condBlock)
+		defer l.popLoop()
 
 		l.builder.Jump(condBlock)
 		l.builder.SetBlock(condBlock)
@@ -165,12 +194,12 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 		addr := l.builder.Alloc(irTypeFromAstType(s.Type))
 
 		// Remember the variable name and its address.
-		if _, exists := l.vars[s.Name]; exists {
+		if _, exists := l.currentScope()[s.Name]; exists {
 			// This should have been caught by the semantic phase.
 			panic(fmt.Sprintf("variable %s already declared", s.Name))
 		}
 
-		l.vars[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
+		l.currentScope()[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
 
 		// If there is an initializer, emit instructions to compute its value and store it.
 		if s.Init != nil {
@@ -264,7 +293,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		return strVal, nil
 	case *ast.IdentExpr:
 		// Look up the variable name and emit a load from its address.
-		v, ok := l.vars[e.Name]
+		v, ok := l.lookupVar(e.Name)
 		if !ok {
 			return 0, fmt.Errorf("undefined variable: %s", e.Name)
 		}
@@ -341,6 +370,36 @@ func boolToInt(b bool) uint64 {
 		return 1
 	}
 	return 0
+}
+
+func (l *Lowerer) pushScope() {
+	l.scopes = append(l.scopes, make(map[string]varInfo))
+}
+
+func (l *Lowerer) popScope() {
+	if len(l.scopes) == 0 {
+		panic("popScope called with empty scope stack")
+	}
+
+	l.scopes = l.scopes[:len(l.scopes)-1]
+}
+
+func (l *Lowerer) currentScope() map[string]varInfo {
+	if len(l.scopes) == 0 {
+		panic("currentScope called with empty scope stack")
+	}
+
+	return l.scopes[len(l.scopes)-1]
+}
+
+func (l *Lowerer) lookupVar(name string) (varInfo, bool) {
+	for i := len(l.scopes) - 1; i >= 0; i-- {
+		if v, ok := l.scopes[i][name]; ok {
+			return v, true
+		}
+	}
+
+	return varInfo{}, false
 }
 
 // irTypeFromAstType converts an AST type to an IR type.
