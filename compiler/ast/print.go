@@ -73,6 +73,15 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		} else {
 			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s\n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
 		}
+	case *IfStmt:
+		fmt.Fprintf(&p.buff, "%sIfStmt\n", p.prefix())
+		p.printExpr(s.Cond, p.indentLevel+1)
+		p.printBlock(s.Then)
+		if s.Else != nil {
+			p.printStmt(s.Else)
+		}
+	case *BlockStmt:
+		p.printBlock(s)
 	}
 }
 

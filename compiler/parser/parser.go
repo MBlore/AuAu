@@ -82,9 +82,25 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		return nil, err
 	}
 
-	_, err = p.expect(token.LBrace)
+	blk, err := p.parseBlock()
 	if err != nil {
-		return nil, errors.New("expected '{' to start function body")
+		return nil, err
+	}
+
+	return &ast.FuncDecl{
+		Name:       funcName.Literal,
+		ReturnType: retType,
+		Params:     params,
+		Body:       blk,
+		IsPublic:   funcName.Literal[0] >= 'A' && funcName.Literal[0] <= 'Z',
+	}, nil
+}
+
+func (p *Parser) parseBlock() (*ast.BlockStmt, error) {
+	// Expect an opening curly brace for the block.
+	_, err := p.expect(token.LBrace)
+	if err != nil {
+		return nil, errors.New("expected '{'")
 	}
 
 	// Parse statements.
@@ -104,18 +120,15 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		return nil, errors.New("expected '}' to end function body")
 	}
 
-	return &ast.FuncDecl{
-		Name:       funcName.Literal,
-		ReturnType: retType,
-		Params:     params,
-		Body:       &ast.BlockStmt{Stmts: stmts},
-		IsPublic:   funcName.Literal[0] >= 'A' && funcName.Literal[0] <= 'Z',
-	}, nil
+	return &ast.BlockStmt{Stmts: stmts}, nil
 }
 
 func (p *Parser) parseStatement() (ast.Stmt, error) {
 	tok := p.peek()
 	switch tok.Type {
+	case token.If:
+		return p.parseIfStmt()
+
 	case token.Ident:
 		// Function call?
 		if p.peekAhead(1).Type == token.LParen {
@@ -207,6 +220,54 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			Name: varName.Literal,
 			Type: varType,
 			Init: initExpr,
+		}, nil
+	}
+}
+
+func (p *Parser) parseIfStmt() (ast.Stmt, error) {
+	p.advance()
+	cond, err := p.parseNewExpr()
+	if err != nil {
+		return nil, fmt.Errorf("invalid condition expression in if statement: %w", err)
+	}
+
+	thenBlock, err := p.parseBlock()
+	if err != nil {
+		return nil, fmt.Errorf("invalid block in if statement: %w", err)
+	}
+
+	if p.peek().Type == token.Else {
+		p.advance()
+
+		if p.peek().Type == token.If {
+			// Handle else if by recursively parsing another if statement as the else block.
+			elseIfStmt, err := p.parseIfStmt()
+			if err != nil {
+				return nil, fmt.Errorf("invalid else if statement: %w", err)
+			}
+
+			return &ast.IfStmt{
+				Cond: cond,
+				Then: thenBlock,
+				Else: elseIfStmt,
+			}, nil
+		} else {
+			// Single else block.
+			elseBlock, err := p.parseBlock()
+			if err != nil {
+				return nil, fmt.Errorf("invalid else block: %w", err)
+			}
+
+			return &ast.IfStmt{
+				Cond: cond,
+				Then: thenBlock,
+				Else: elseBlock,
+			}, nil
+		}
+	} else {
+		return &ast.IfStmt{
+			Cond: cond,
+			Then: thenBlock,
 		}, nil
 	}
 }

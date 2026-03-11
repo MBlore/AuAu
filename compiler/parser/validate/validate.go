@@ -60,19 +60,81 @@ func checkBlockForDuplicateVariables(ctx *validateContext, block *ast.BlockStmt)
 	variableNames := make(map[string]bool)
 
 	// We allow shadow variables in nested blocks.
-
 	for _, stmt := range block.Stmts {
-		switch s := stmt.(type) {
-		case *ast.VarDeclStmt:
-			if variableNames[s.Name] {
-				ctx.errors = append(ctx.errors, errors.New("duplicate variable name in same block: "+s.Name))
-			} else {
-				variableNames[s.Name] = true
-				ctx.varTypes[s.Name] = s.Type
-			}
-		case *ast.BlockStmt:
-			// Recurse into nested blocks.
-			checkBlockForDuplicateVariables(ctx, s)
+		checkStmtForDuplicateVariables(ctx, stmt, variableNames)
+	}
+}
+
+// checkStmtForDuplicateVariables is used to check for duplicate variable names in statements that aren't blocks, such as else if statements.
+func checkStmtForDuplicateVariables(ctx *validateContext, stmt ast.Stmt, variableNames map[string]bool) {
+	switch s := stmt.(type) {
+	case *ast.VarDeclStmt:
+		if variableNames[s.Name] {
+			ctx.errors = append(ctx.errors, errors.New("duplicate variable name in same block: "+s.Name))
+		} else {
+			variableNames[s.Name] = true
+			ctx.varTypes[s.Name] = s.Type
 		}
+
+	case *ast.BlockStmt:
+		checkBlockForDuplicateVariables(ctx, s)
+
+	case *ast.IfStmt:
+		checkBlockForDuplicateVariables(ctx, s.Then)
+
+		if s.Else != nil {
+			checkNestedStmtForDuplicateVariables(ctx, s.Else)
+		}
+
+	case *ast.WhileStmt:
+		checkBlockForDuplicateVariables(ctx, s.Body)
+
+	case *ast.ForStmt:
+		// Create a new empty map for loop variables to allow shadowing within the loop.
+		loopVariableNames := make(map[string]bool)
+
+		if s.Init != nil {
+			checkStmtForDuplicateVariables(ctx, s.Init, loopVariableNames)
+		}
+		if s.Body != nil {
+			checkBlockForDuplicateVariables(ctx, s.Body)
+		}
+		if s.Post != nil {
+			checkStmtForDuplicateVariables(ctx, s.Post, loopVariableNames)
+		}
+	}
+}
+
+// checkNestedStmtForDuplicateVariables handles statements that execute in their own nested scope.
+func checkNestedStmtForDuplicateVariables(ctx *validateContext, stmt ast.Stmt) {
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		checkBlockForDuplicateVariables(ctx, s)
+
+	case *ast.IfStmt:
+		checkBlockForDuplicateVariables(ctx, s.Then)
+
+		if s.Else != nil {
+			checkNestedStmtForDuplicateVariables(ctx, s.Else)
+		}
+
+	case *ast.WhileStmt:
+		checkBlockForDuplicateVariables(ctx, s.Body)
+
+	case *ast.ForStmt:
+		loopVariableNames := make(map[string]bool)
+
+		if s.Init != nil {
+			checkStmtForDuplicateVariables(ctx, s.Init, loopVariableNames)
+		}
+		if s.Body != nil {
+			checkBlockForDuplicateVariables(ctx, s.Body)
+		}
+		if s.Post != nil {
+			checkStmtForDuplicateVariables(ctx, s.Post, loopVariableNames)
+		}
+
+	case *ast.VarDeclStmt:
+		ctx.varTypes[s.Name] = s.Type
 	}
 }

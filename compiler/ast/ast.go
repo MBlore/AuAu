@@ -171,3 +171,30 @@ type UnaryExpr struct {
 }
 
 func (*UnaryExpr) isExpr() {}
+
+type IfStmt struct {
+	NodeMeta
+	Cond Expr
+	Then *BlockStmt
+	Else Stmt // nil, *BlockStmt, or *IfStmt
+}
+
+func (*IfStmt) isStmt() {}
+
+type WhileStmt struct {
+	NodeMeta
+	Cond Expr
+	Body *BlockStmt
+}
+
+func (*WhileStmt) isStmt() {}
+
+type ForStmt struct {
+	NodeMeta
+	Init Stmt
+	Cond Expr
+	Post Stmt
+	Body *BlockStmt
+}
+
+func (*ForStmt) isStmt() {}

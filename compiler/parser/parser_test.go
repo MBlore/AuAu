@@ -150,7 +150,7 @@ func TestReadTwoFuncs(t *testing.T) {
 	if fooFunc.IsPublic != true {
 		t.Errorf("Expected 'Foo' function to be public, got IsPublic=%v", fooFunc.IsPublic)
 	}
-	if fooFunc.ReturnType.Kind != ast.TypeInt64 {
+	if fooFunc.ReturnType.Kind != ast.TypeInt {
 		t.Errorf("Expected 'Foo' function return type to be 'int', got %v", fooFunc.ReturnType.Kind)
 	}
 }

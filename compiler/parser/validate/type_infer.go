@@ -20,11 +20,44 @@ func inferConstantTypes(ctx *validateContext) {
 
 func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt) {
 	for _, stmt := range block.Stmts {
-		switch s := stmt.(type) {
-		case *ast.VarDeclStmt:
-			if s.Init != nil {
-				validateExprType(ctx, s.Type, s.Init)
-			}
+		inferTypesInStmt(ctx, stmt)
+	}
+}
+
+// inferTypesInStmt is used to infer types in statements that aren't blocks, such as else if statements.
+func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt) {
+	switch s := stmt.(type) {
+	case *ast.CallStmt:
+		for _, arg := range s.Args {
+			inferExprDefaultType(ctx, arg)
+		}
+	case *ast.VarDeclStmt:
+		if s.Init != nil {
+			validateExprType(ctx, s.Type, s.Init)
+		}
+	case *ast.IfStmt:
+		validateExprType(ctx, ast.TypeBoolRef, s.Cond)
+		inferTypesInBlock(ctx, s.Then)
+		if s.Else != nil {
+			inferTypesInStmt(ctx, s.Else)
+		}
+	case *ast.BlockStmt:
+		inferTypesInBlock(ctx, s)
+	case *ast.WhileStmt:
+		validateExprType(ctx, ast.TypeBoolRef, s.Cond)
+		inferTypesInBlock(ctx, s.Body)
+	case *ast.ForStmt:
+		if s.Init != nil {
+			inferTypesInStmt(ctx, s.Init)
+		}
+		if s.Cond != nil {
+			validateExprType(ctx, ast.TypeBoolRef, s.Cond)
+		}
+		if s.Body != nil {
+			inferTypesInBlock(ctx, s.Body)
+		}
+		if s.Post != nil {
+			inferTypesInStmt(ctx, s.Post)
 		}
 	}
 }
@@ -242,5 +275,25 @@ func isIntegerType(t *ast.TypeRef) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// inferExprDefaultType is used to infer the default type of an expression when we don't have any other information about what type it should be.
+// This is used for literals and binary expressions where the type can be inferred from the context.
+func inferExprDefaultType(ctx *validateContext, expr ast.Expr) {
+	switch e := expr.(type) {
+	case *ast.StringLiteralExpr:
+		validateExprType(ctx, ast.TypeStringRef, e)
+	case *ast.BoolLiteralExpr:
+		validateExprType(ctx, ast.TypeBoolRef, e)
+	case *ast.BinaryExpr:
+		switch e.Op {
+		case token.EqEq, token.NotEq, token.Lt, token.LtEq, token.Gt, token.GtEq:
+			validateExprType(ctx, ast.TypeBoolRef, e)
+		default:
+			validateExprType(ctx, ast.TypeIntRef, e)
+		}
+	default:
+		validateExprType(ctx, ast.TypeIntRef, expr)
 	}
 }

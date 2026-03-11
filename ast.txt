@@ -1,27 +1,37 @@
 package main
 FuncDecl main() return=void public=false
 BlockStmt
-  VarDeclStmt a bool = 
-    BoolLiteralExpr(true)
-  VarDeclStmt b bool = 
-    BoolLiteralExpr(false)
-  VarDeclStmt c bool = 
-    BinaryExpr(<)
+  IfStmt
+    BinaryExpr(>)
       IntLiteralExpr(1)
       IntLiteralExpr(2)
-  VarDeclStmt d bool = 
+  BlockStmt
+    IfStmt
+      BinaryExpr(==)
+        IntLiteralExpr(2)
+        IntLiteralExpr(2)
+    BlockStmt
+      CallStmt print
+        IntLiteralExpr(3)
+    CallStmt print
+      IntLiteralExpr(1)
+  BlockStmt
+    CallStmt print
+      IntLiteralExpr(2)
+  IfStmt
     BinaryExpr(==)
       IntLiteralExpr(1)
-      IntLiteralExpr(1)
-  VarDeclStmt e bool = 
-    BinaryExpr(<)
-      BinaryExpr(+)
-        IntLiteralExpr(1)
-        IntLiteralExpr(2)
-      IntLiteralExpr(4)
-  VarDeclStmt f bool = 
+      IntLiteralExpr(2)
+  BlockStmt
+    CallStmt print
+      IntLiteralExpr(10)
+  IfStmt
     BinaryExpr(==)
-      BinaryExpr(+)
-        IntLiteralExpr(1)
-        IntLiteralExpr(2)
+      IntLiteralExpr(2)
       IntLiteralExpr(3)
+  BlockStmt
+    CallStmt print
+      IntLiteralExpr(11)
+  BlockStmt
+    CallStmt print
+      IntLiteralExpr(12)

@@ -59,26 +59,35 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 	for _, fn := range program.Functions {
 		frame := buildStackFrame(fn)
 
-		// Write the function prologue.
-		if fn.Public || fn.Name == "main" {
-			b.WriteString("global " + fn.Name + "\n")
-		}
-		b.WriteString(fn.Name + ":\n")
-		b.WriteString("  push rbp\n")
-		b.WriteString("  mov rbp, rsp\n")
-		fmt.Fprintf(&b, "  sub rsp, %d\n", frame.size)
-
-		if fn.Name == "main" {
-			// Call SetConsoleOutputCP at the start of main to set the console code page to UTF-8.
-			b.WriteString("  mov ecx, 65001 ; CP_UTF8\n")
-			b.WriteString("  call SetConsoleOutputCP\n")
-
-		}
-
 		// Write function body...
-		for _, block := range fn.Blocks {
+		for i, block := range fn.Blocks {
+			label := asmBlockLabel(fn, block)
+
+			if i == 0 {
+				if fn.Public || fn.Name == "main" {
+					b.WriteString("global " + fn.Name + "\n")
+				}
+
+				b.WriteString(fn.Name + ":\n")
+			}
+
+			b.WriteString(label + ":\n")
+
+			if i == 0 {
+				// Only the first block of the func gets the prologue.
+				b.WriteString("  push rbp\n")
+				b.WriteString("  mov rbp, rsp\n")
+				fmt.Fprintf(&b, "  sub rsp, %d\n", frame.size)
+
+				// Main sets the codepage to support unicode.
+				if fn.Name == "main" {
+					b.WriteString("  mov ecx, 65001 ; CP_UTF8\n")
+					b.WriteString("  call SetConsoleOutputCP\n")
+				}
+			}
+
 			for _, instr := range block.Instrs {
-				emitOpCode(&b, instr, frame, stringLabels)
+				emitOpCode(&b, instr, frame, stringLabels, fn)
 			}
 		}
 
@@ -95,8 +104,18 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 }
 
 // emitOpCode emits the assembly code for a given IR instruction based on its OpCode.
-func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabels map[*ir.Instr]string) {
+func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabels map[*ir.Instr]string, fn *ir.Function) {
 	switch instr.Op {
+	case ir.OpBranch:
+		// Condition is in Arg0, then jump to the right block.
+		fmt.Fprintf(b, "  movzx eax, byte %s\n", slot(frame, instr.Args[0]))
+		fmt.Fprintf(b, "  test al, al\n")
+		fmt.Fprintf(b, "  jne %s\n", asmBlockLabel(fn, instr.TrueBlock))
+		fmt.Fprintf(b, "  jmp %s\n", asmBlockLabel(fn, instr.FalseBlock))
+
+	case ir.OpJump:
+		fmt.Fprintf(b, "  jmp %s\n", asmBlockLabel(fn, instr.JumpBlock))
+
 	case ir.OpCmp:
 		operandType := valueType(frame, instr.Args[0])
 
@@ -443,4 +462,12 @@ func valueType(frame *stackFrame, value ir.IRValue) ir.Type {
 	}
 
 	return t
+}
+
+// asmBlockLabel generates a unique label for a given IR block within a function for use in assembly code.
+func asmBlockLabel(fn *ir.Function, block *ir.Block) string {
+	if block.Name != "" {
+		return fmt.Sprintf("%s_block%d_%s", fn.Name, block.ID, block.Name)
+	}
+	return fmt.Sprintf("%s_block%d", fn.Name, block.ID)
 }

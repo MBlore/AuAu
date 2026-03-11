@@ -78,61 +78,135 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 // emitBlock iterates over the statements in the given block and emits instructions.
 func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 	for _, stmt := range block.Stmts {
-		switch s := stmt.(type) {
-		case *ast.CallStmt:
-			// Emit instructions for the function call.
-			if s.FuncName == "print" {
-				// Special case for print since we don't have a standard library yet.
-				// We will emit a call to an OpPrint instruction that the backend can handle.
-				if len(s.Args) != 1 {
-					return fmt.Errorf("print expects exactly one argument")
-				}
-
-				val, err := l.emitExpr(s.Args[0])
-				if err != nil {
-					return fmt.Errorf("invalid argument to print: %w", err)
-				}
-
-				l.builder.Print(val)
-			} else {
-				panic(fmt.Sprintf("unsupported function call: %s", s.FuncName))
-			}
-		case *ast.ReturnStmt:
-			if s.ReturnExpr != nil {
-				val, err := l.emitExpr(s.ReturnExpr)
-				if err != nil {
-					return err
-				}
-
-				l.builder.Return(val)
-			} else {
-				l.builder.Return()
-			}
-		case *ast.VarDeclStmt:
-			// Create a new address value for the variable.
-			addr := l.builder.Alloc(irTypeFromAstType(s.Type))
-
-			// Remember the variable name and its address.
-			if _, exists := l.vars[s.Name]; exists {
-				// This should have been caught by the semantic phase.
-				panic(fmt.Sprintf("variable %s already declared", s.Name))
-			}
-
-			l.vars[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
-
-			// If there is an initializer, emit instructions to compute its value and store it.
-			if s.Init != nil {
-				val, err := l.emitExpr(s.Init)
-				if err != nil {
-					return err
-				}
-
-				// Emit a store instruction to initialize the variable.
-				l.builder.Store(addr, val)
-			}
-		default:
-			panic(fmt.Sprintf("unsupported statement type %T", stmt))
+		if err := l.emitStmt(stmt); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
+	switch s := stmt.(type) {
+	case *ast.CallStmt:
+		// Emit instructions for the function call.
+		if s.FuncName == "print" {
+			// Special case for print since we don't have a standard library yet.
+			// We will emit a call to an OpPrint instruction that the backend can handle.
+			if len(s.Args) != 1 {
+				return fmt.Errorf("print expects exactly one argument")
+			}
+
+			val, err := l.emitExpr(s.Args[0])
+			if err != nil {
+				return fmt.Errorf("invalid argument to print: %w", err)
+			}
+
+			l.builder.Print(val)
+		} else {
+			panic(fmt.Sprintf("unsupported function call: %s", s.FuncName))
+		}
+	case *ast.ReturnStmt:
+		if s.ReturnExpr != nil {
+			val, err := l.emitExpr(s.ReturnExpr)
+			if err != nil {
+				return err
+			}
+
+			l.builder.Return(val)
+		} else {
+			l.builder.Return()
+		}
+	case *ast.VarDeclStmt:
+		// Create a new address value for the variable.
+		addr := l.builder.Alloc(irTypeFromAstType(s.Type))
+
+		// Remember the variable name and its address.
+		if _, exists := l.vars[s.Name]; exists {
+			// This should have been caught by the semantic phase.
+			panic(fmt.Sprintf("variable %s already declared", s.Name))
+		}
+
+		l.vars[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
+
+		// If there is an initializer, emit instructions to compute its value and store it.
+		if s.Init != nil {
+			val, err := l.emitExpr(s.Init)
+			if err != nil {
+				return err
+			}
+
+			// Emit a store instruction to initialize the variable.
+			l.builder.Store(addr, val)
+		}
+	case *ast.IfStmt:
+
+		// If without else.
+		if s.Else == nil {
+			thenBlock := l.builder.NewBlock("then")
+			endBlock := l.builder.NewBlock("end")
+
+			condVal, err := l.emitExpr(s.Cond)
+			if err != nil {
+				return fmt.Errorf("invalid condition expression in if statement: %w", err)
+			}
+
+			l.builder.Branch(condVal, thenBlock, endBlock)
+
+			l.builder.SetBlock(thenBlock)
+			if err := l.emitBlock(s.Then); err != nil {
+				return err
+			}
+
+			// If the then block doesn't end with a return or branch, add a jump to the end.
+			if !blockTerminated(l.builder.CurrentBlock()) {
+				l.builder.Jump(endBlock)
+			}
+
+			l.builder.SetBlock(endBlock)
+		} else {
+			// If with else.
+			thenBlock := l.builder.NewBlock("then")
+			elseBlock := l.builder.NewBlock("else")
+			endBlock := l.builder.NewBlock("end")
+
+			condVal, err := l.emitExpr(s.Cond)
+			if err != nil {
+				return fmt.Errorf("invalid condition expression in if statement: %w", err)
+			}
+
+			l.builder.Branch(condVal, thenBlock, elseBlock)
+
+			l.builder.SetBlock(thenBlock)
+			if err := l.emitBlock(s.Then); err != nil {
+				return err
+			}
+
+			// If the then block doesn't end with a return or branch, add a jump to the end.
+			if !blockTerminated(l.builder.CurrentBlock()) {
+				l.builder.Jump(endBlock)
+			}
+
+			l.builder.SetBlock(elseBlock)
+			if err := l.emitStmt(s.Else); err != nil {
+				return err
+			}
+
+			// If the else block doesn't end with a return or branch, add a jump to the end.
+			if !blockTerminated(l.builder.CurrentBlock()) {
+				l.builder.Jump(endBlock)
+			}
+
+			l.builder.SetBlock(endBlock)
+		}
+
+	case *ast.BlockStmt:
+		if err := l.emitBlock(s); err != nil {
+			return err
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported statement type %T", stmt))
 	}
 
 	return nil
@@ -274,4 +348,14 @@ func cmpKindFromToken(tok token.TokenType) (CmpKind, error) {
 	default:
 		return 0, fmt.Errorf("unsupported comparison operator %s", ast.TokenTypeToString(tok))
 	}
+}
+
+// blockTerminated returns true if the last instruction is OpReturn, OpBranch, or OpJump.
+func blockTerminated(block *Block) bool {
+	if len(block.Instrs) == 0 {
+		return false
+	}
+
+	lastOp := block.Instrs[len(block.Instrs)-1].Op
+	return lastOp == OpReturn || lastOp == OpBranch || lastOp == OpJump
 }

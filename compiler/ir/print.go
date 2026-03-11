@@ -25,6 +25,22 @@ func (p *IRProgram) String() string {
 // InstrToString converts an IR instruction to a human-readable string representation.
 func InstrToString(instr *Instr) string {
 	switch instr.Op {
+	case OpBranch:
+		if len(instr.Args) == 0 {
+			return fmt.Sprintf("br %s", printBlockLabel(instr.TrueBlock))
+		}
+		if instr.FalseBlock != nil {
+			return fmt.Sprintf("br %s, %s, %s",
+				printValue(instr.Args[0]),
+				printBlockLabel(instr.TrueBlock),
+				printBlockLabel(instr.FalseBlock))
+		}
+
+		return fmt.Sprintf("br %s, %s", printValue(instr.Args[0]), printBlockLabel(instr.TrueBlock))
+
+	case OpJump:
+		return fmt.Sprintf("jmp %s", printBlockLabel(instr.JumpBlock))
+
 	case OpCmp:
 		return fmt.Sprintf("%s = cmp %s %s, %s",
 			printTypedValue(instr.Dest, instr.Type),
@@ -123,6 +139,16 @@ func printType(tp Type) string {
 	default:
 		return "<invalid-type>"
 	}
+}
+
+func printBlockLabel(block *Block) string {
+	if block == nil {
+		return "<nil-block>"
+	}
+	if block.Name != "" {
+		return fmt.Sprintf("block%d(%s)", block.ID, block.Name)
+	}
+	return fmt.Sprintf("block%d", block.ID)
 }
 
 func opToString(op OpCode) string {

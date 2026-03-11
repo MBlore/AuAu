@@ -65,14 +65,16 @@ const (
 )
 
 type Instr struct {
-	Op   OpCode
-	Dest IRValue
-	Type Type
-	Args []IRValue
-	// For OpConst, the constant value is stored here.
-	Const uint64
-	Data  []byte
-	Cmp   CmpKind
+	Op         OpCode    // The operation code of this instruction.
+	Dest       IRValue   // The destination value of this instruction, if any.
+	Type       Type      // The type of the value produced by this instruction, if any.
+	Args       []IRValue // For OpLoad and OpStore, the address is stored here.
+	Const      uint64    // For OpLoad and OpStore, the address is stored here.
+	Data       []byte    // For OpStringConst, the string data is stored here.
+	Cmp        CmpKind   // For OpCmp, the kind of comparison.
+	TrueBlock  *Block    // For OpBranch, the block to jump to if the condition is true.
+	FalseBlock *Block    // For OpBranch, the block to jump to if the condition is false.
+	JumpBlock  *Block    // For OpJump, the block to jump to unconditionally.
 }
 
 type Function struct {
@@ -83,6 +85,7 @@ type Function struct {
 
 type Block struct {
 	ID     int
+	Name   string
 	Instrs []*Instr
 }
 

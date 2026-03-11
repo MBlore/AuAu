@@ -7,7 +7,7 @@ func NewBuilder(name string, public bool) *Builder {
 		fn: fn,
 	}
 
-	entry := b.NewBlock()
+	entry := b.NewBlock("entry")
 	b.SetBlock(entry)
 	return b
 }
@@ -20,10 +20,16 @@ func (b *Builder) SetBlock(block *Block) {
 	b.current = block
 }
 
-func (b *Builder) NewBlock() *Block {
-	block := &Block{ID: b.nextBlockID}
+func (b *Builder) CurrentBlock() *Block {
+	return b.current
+}
+
+func (b *Builder) NewBlock(name string) *Block {
+	block := &Block{ID: b.nextBlockID, Name: name}
+
 	b.nextBlockID++
 	b.fn.Blocks = append(b.fn.Blocks, block)
+
 	return block
 }
 
@@ -199,4 +205,27 @@ func (b *Builder) Cmp(kind CmpKind, l, r IRValue) IRValue {
 	b.current.Instrs = append(b.current.Instrs, instr)
 
 	return dest
+}
+
+func (b *Builder) Branch(cond IRValue, trueBlock, falseBlock *Block) {
+	b.ensureBlock()
+
+	instr := &Instr{
+		Op:         OpBranch,
+		Args:       []IRValue{cond},
+		TrueBlock:  trueBlock,
+		FalseBlock: falseBlock,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+}
+
+func (b *Builder) Jump(target *Block) {
+	b.ensureBlock()
+	instr := &Instr{
+		Op:        OpJump,
+		JumpBlock: target,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
 }
