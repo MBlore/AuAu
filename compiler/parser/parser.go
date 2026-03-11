@@ -140,6 +140,9 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 	case token.If:
 		return p.parseIfStmt()
 
+	case token.For:
+		return p.parseForStmt()
+
 	case token.Ident:
 		// Assign?
 		if p.peekAhead(1).Type == token.Equals {
@@ -251,6 +254,41 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			Init: initExpr,
 		}, nil
 	}
+}
+
+func (p *Parser) parseForStmt() (ast.Stmt, error) {
+	// Format is: for int i = 0; i < 5; i = i + 1 { ... }
+	p.advance()
+	init, err := p.parseStatement()
+	if err != nil {
+		return nil, fmt.Errorf("invalid initializer statement in for loop: %w", err)
+	}
+
+	p.expect(token.Semicolon)
+
+	cond, err := p.parseNewExpr()
+	if err != nil {
+		return nil, fmt.Errorf("invalid condition expression in for loop: %w", err)
+	}
+
+	p.expect(token.Semicolon)
+
+	post, err := p.parseStatement()
+	if err != nil {
+		return nil, fmt.Errorf("invalid post statement in for loop: %w", err)
+	}
+
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, fmt.Errorf("invalid block in for loop: %w", err)
+	}
+
+	return &ast.ForStmt{
+		Init: init,
+		Cond: cond,
+		Post: post,
+		Body: body,
+	}, nil
 }
 
 func (p *Parser) parseIfStmt() (ast.Stmt, error) {

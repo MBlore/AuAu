@@ -1,54 +1,38 @@
 package main
 FuncDecl main() return=void public=false
 BlockStmt
-  VarDeclStmt a int = 
-    IntLiteralExpr(0)
-  WhileStmt
+  ForStmt
+    Init:
+    VarDeclStmt i int = 
+      IntLiteralExpr(0)
     Cond:
       BinaryExpr(<)
-        IdentExpr(a)
-        IntLiteralExpr(10)
+        IdentExpr(i)
+        IntLiteralExpr(5)
+    Post:
+    AssignStmt i =
+      BinaryExpr(+)
+        IdentExpr(i)
+        IntLiteralExpr(1)
     Body:
     BlockStmt
-      BreakStmt
-  CallStmt print
-    IntLiteralExpr(1)
-  VarDeclStmt b int = 
-    IntLiteralExpr(0)
-  WhileStmt
-    Cond:
-      BinaryExpr(<)
-        IdentExpr(b)
-        IntLiteralExpr(10)
-    Body:
-    BlockStmt
-      CallStmt print
-        UnaryExpr(-)
-          IntLiteralExpr(1)
-      AssignStmt b =
-        BinaryExpr(+)
-          IdentExpr(b)
-          IntLiteralExpr(1)
-      ContinueStmt
-  CallStmt print
-    IntLiteralExpr(2)
-  VarDeclStmt c int = 
-    IntLiteralExpr(0)
-  WhileStmt
-    Cond:
-      BinaryExpr(<)
-        IdentExpr(c)
-        IntLiteralExpr(10)
-    Body:
-    BlockStmt
-      WhileStmt
+      IfStmt
         Cond:
-          BinaryExpr(<)
-            IdentExpr(c)
-            IntLiteralExpr(5)
-        Body:
+          BinaryExpr(==)
+            IdentExpr(i)
+            IntLiteralExpr(2)
+        Then:
+        BlockStmt
+          ContinueStmt
+      IfStmt
+        Cond:
+          BinaryExpr(==)
+            IdentExpr(i)
+            IntLiteralExpr(4)
+        Then:
         BlockStmt
           BreakStmt
-      BreakStmt
+      CallStmt print
+        IdentExpr(i)
   CallStmt print
-    IntLiteralExpr(3)
+    IntLiteralExpr(99)
