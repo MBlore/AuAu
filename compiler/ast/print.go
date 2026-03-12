@@ -54,6 +54,17 @@ func (p *AstPrinter) printBlock(block *BlockStmt) {
 
 func (p *AstPrinter) printStmt(stmt Stmt) {
 	switch s := stmt.(type) {
+	case *ExternFuncStmt:
+		fmt.Fprintf(&p.buff, "%sExternFuncStmt %s(", p.prefix(), s.Name)
+
+		for i, param := range s.Params {
+			p.buff.WriteString(TypeKindToString(param.Type.Kind) + " " + param.Name)
+			if i < len(s.Params)-1 {
+				p.buff.WriteString(", ")
+			}
+		}
+
+		fmt.Fprintf(&p.buff, ") return=%s\n", TypeKindToString(s.ReturnType.Kind))
 	case *AssignStmt:
 		fmt.Fprintf(&p.buff, "%sAssignStmt %s =\n", p.prefix(), s.Name)
 		p.printExpr(s.Value, p.indentLevel+1)

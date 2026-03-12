@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -36,7 +37,7 @@ func (p *Parser) addError(tok token.Token, err error) {
 func (p *Parser) expect(tt token.TokenType) (token.Token, error) {
 	tok := p.peek()
 	if tok.Type != tt {
-		return tok, errors.New("unexpected token")
+		return tok, errors.New("unexpected token, got '" + tok.Literal + "', expected '" + ast.TokenTypeToString(tt) + "'")
 	}
 
 	p.advance()

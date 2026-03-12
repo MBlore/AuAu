@@ -45,8 +45,22 @@ func (p *Parser) Parse() ParseResult {
 	}
 
 	funcs := []*ast.FuncDecl{}
+	externs := []*ast.ExternFuncStmt{}
 
 	for p.peek().Type != token.EOF {
+		if p.peek().Type == token.Extern {
+			// Handle extern function declarations.
+			externFunc, err := p.parseExternFuncDecl()
+			if err != nil {
+				// Peek on error as parsing would have advanced.
+				p.addError(p.peek(), err)
+				return ParseResult{Errors: p.errors}
+			}
+
+			externs = append(externs, externFunc)
+			continue
+		}
+
 		// We're only expecting function declarations at the moment.
 		f, err := p.parseFuncDecl()
 		if err != nil {
@@ -61,6 +75,7 @@ func (p *Parser) Parse() ParseResult {
 	sourceFile := ast.File{
 		PackageName: tokPackageName.Literal,
 		Functions:   funcs,
+		Externs:     externs,
 	}
 
 	return ParseResult{File: &sourceFile, Errors: p.errors}
@@ -100,7 +115,7 @@ func (p *Parser) parseBlock() (*ast.BlockStmt, error) {
 	// Expect an opening curly brace for the block.
 	_, err := p.expect(token.LBrace)
 	if err != nil {
-		return nil, errors.New("expected '{'")
+		return nil, errors.New("expected '{', got '" + p.peek().Literal + "'")
 	}
 
 	// Parse statements.
@@ -117,7 +132,7 @@ func (p *Parser) parseBlock() (*ast.BlockStmt, error) {
 
 	_, err = p.expect(token.RBrace)
 	if err != nil {
-		return nil, errors.New("expected '}' to end function body")
+		return nil, errors.New("expected '}' to end function body, got '" + p.peek().Literal + "'")
 	}
 
 	return &ast.BlockStmt{Stmts: stmts}, nil
@@ -223,6 +238,10 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 		}
 
 		return &ast.ReturnStmt{ReturnExpr: returnExpr}, nil
+
+	case token.Extern:
+		return nil, errors.New("unexpected 'extern' keyword, extern function declarations must be at the file level")
+
 	default:
 		// Assume its a variable definition for now.
 		varType, err := p.parseType()
@@ -254,6 +273,31 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			Init: initExpr,
 		}, nil
 	}
+}
+
+func (p *Parser) parseExternFuncDecl() (*ast.ExternFuncStmt, error) {
+	p.advance()
+
+	retType, err := p.parseType()
+	if err != nil {
+		return nil, errors.New("expected return type for extern function declaration")
+	}
+
+	funcName, err := p.expect(token.Ident)
+	if err != nil {
+		return nil, errors.New("expected function name after return type in extern function declaration")
+	}
+
+	params, err := p.parseParamList()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.ExternFuncStmt{
+		Name:       funcName.Literal,
+		ReturnType: retType,
+		Params:     params,
+	}, nil
 }
 
 func (p *Parser) parseForStmt() (ast.Stmt, error) {
@@ -385,11 +429,18 @@ func (p *Parser) parseParamList() ([]ast.Param, error) {
 		})
 
 		// Next token must be comma or closing parenthesis.
-		if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
+		next := p.peek().Type
+		if next != token.Comma && next != token.RParen {
 			return nil, errors.New("expected ',' or ')' after parameter")
 		}
 
-		p.advance()
+		if next == token.Comma {
+			p.advance()
+		}
+
+		if next == token.RParen {
+			break
+		}
 	}
 
 	// Skip the closing parenthesis.

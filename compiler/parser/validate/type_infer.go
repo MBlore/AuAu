@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/MBlore/AuAu/ast"
-	"github.com/MBlore/AuAu/diagnostics"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -77,12 +76,11 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 	switch e := expr.(type) {
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
-			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got string",
-				ast.TypeKindToString(expectedType.Kind))))
+			ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got string")
 		}
 	case *ast.IntLiteralExpr:
 		if err := literalFitsType(e, false, expectedType); err != nil {
-			ctx.errors = append(ctx.errors, err)
+			ctx.addError(e.NodeMeta, err.Error())
 			return
 		}
 
@@ -99,7 +97,7 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		}
 
 		if err := literalFitsType(lit, true, expectedType); err != nil {
-			ctx.errors = append(ctx.errors, err)
+			ctx.addError(e.NodeMeta, err.Error())
 			return
 		}
 
@@ -109,8 +107,7 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		switch e.Op {
 		case token.EqEq, token.NotEq:
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
-					ast.TypeKindToString(expectedType.Kind))))
+				ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got bool")
 			}
 
 			operandType := inferComparisonOperandType(scope, e.Left, e.Right)
@@ -128,14 +125,13 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		case token.Lt, token.LtEq, token.Gt, token.GtEq:
 			// Check expected type is valid for comparison operators.
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
-					ast.TypeKindToString(expectedType.Kind))))
+				ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got bool")
 			}
 
 			operandType := inferComparisonOperandType(scope, e.Left, e.Right)
 
 			if !isIntegerType(operandType) {
-				ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op))))
+				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer operands")
 				return
 			}
 
@@ -149,24 +145,18 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		}
 	case *ast.BoolLiteralExpr:
 		if expectedType.Kind != ast.TypeBool {
-			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("type mismatch: expected %s, got bool",
-				ast.TypeKindToString(expectedType.Kind))))
+			ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got bool")
 		}
 	case *ast.IdentExpr:
 		// Types must match the declared type of the variable.
 		declType, ok := scope[e.Name]
 		if !ok {
-			ctx.errors = append(ctx.errors, diagnostics.WrapError(e.NodeMeta, fmt.Errorf("undefined variable: %s", e.Name)))
+			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
 			return
 		}
 
 		if declType.Kind != expectedType.Kind {
-			ctx.errors = append(
-				ctx.errors,
-				diagnostics.WrapError(e.NodeMeta,
-					fmt.Errorf("type mismatch: expected %s, got %s",
-						ast.TypeKindToString(expectedType.Kind),
-						ast.TypeKindToString(declType.Kind))))
+			ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got "+ast.TypeKindToString(declType.Kind))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected expression type %T in validateExprType", expr))

@@ -1,8 +1,6 @@
 package validate
 
 import (
-	"errors"
-
 	"github.com/MBlore/AuAu/ast"
 )
 
@@ -45,12 +43,12 @@ func checkLoopControlInStmt(ctx *validateContext, stmt ast.Stmt, loopDepth int) 
 
 	case *ast.BreakStmt:
 		if loopDepth == 0 {
-			ctx.errors = append(ctx.errors, errors.New("break used outside of loop"))
+			ctx.addError(s.NodeMeta, "break used outside of loop")
 		}
 
 	case *ast.ContinueStmt:
 		if loopDepth == 0 {
-			ctx.errors = append(ctx.errors, errors.New("continue used outside of loop"))
+			ctx.addError(s.NodeMeta, "continue used outside of loop")
 		}
 	}
 }

@@ -54,6 +54,7 @@ type File struct {
 	PackageName string
 
 	Functions []*FuncDecl
+	Externs   []*ExternFuncStmt
 }
 
 type Comment struct {
@@ -218,3 +219,12 @@ type AssignStmt struct {
 }
 
 func (*AssignStmt) isStmt() {}
+
+type ExternFuncStmt struct {
+	NodeMeta
+	Name       string
+	Params     []Param
+	ReturnType *TypeRef
+}
+
+func (*ExternFuncStmt) isStmt() {}

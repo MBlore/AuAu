@@ -250,3 +250,27 @@ func TestVariableTypesParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestParsesExterns(t *testing.T) {
+	input := `package "main"
+
+	extern int printf(string format)
+
+	void main() { }`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	if len(pr.File.Externs) != 1 {
+		t.Errorf("Expected 1 extern function, got %d", len(pr.File.Externs))
+	}
+}

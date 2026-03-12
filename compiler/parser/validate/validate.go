@@ -3,10 +3,8 @@ package validate
 // This package performs semantic validation on the AST.
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/MBlore/AuAu/ast"
+	"github.com/MBlore/AuAu/diagnostics"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -14,6 +12,10 @@ type validateContext struct {
 	file     *ast.File
 	varTypes map[string]*ast.TypeRef
 	errors   []error
+}
+
+func (ctx *validateContext) addError(nodeMeta ast.NodeMeta, message string) {
+	ctx.errors = append(ctx.errors, diagnostics.Error(nodeMeta, message))
 }
 
 // Validate takes an AST File and performs semantic validation, returning any errors found.
@@ -27,6 +29,7 @@ func Validate(file *ast.File) []error {
 	ensurePackageDeclared(context)
 	ensureUniqueFunctionNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
+	ensureUniqueExternFuncNames(context)
 
 	inferConstantTypes(context)
 
@@ -40,7 +43,7 @@ func Validate(file *ast.File) []error {
 
 func ensurePackageDeclared(ctx *validateContext) {
 	if ctx.file.PackageName == "" {
-		ctx.errors = append(ctx.errors, errors.New("package declaration is missing at top of file, e.g. 'package main'"))
+		ctx.addError(ast.NodeMeta{}, "package declaration is missing at top of file, e.g. 'package main'")
 	}
 }
 
@@ -48,7 +51,7 @@ func ensureUniqueFunctionNames(ctx *validateContext) {
 	functionNames := make(map[string]bool)
 	for _, fn := range ctx.file.Functions {
 		if functionNames[fn.Name] {
-			ctx.errors = append(ctx.errors, errors.New("duplicate function name: "+fn.Name))
+			ctx.addError(fn.NodeMeta, "duplicate function name: "+fn.Name)
 		} else {
 			functionNames[fn.Name] = true
 		}
@@ -78,7 +81,7 @@ func checkStmtForDuplicateVariables(ctx *validateContext, stmt ast.Stmt, variabl
 	switch s := stmt.(type) {
 	case *ast.VarDeclStmt:
 		if variableNames[s.Name] {
-			ctx.errors = append(ctx.errors, errors.New("duplicate variable name in same block: "+s.Name))
+			ctx.addError(s.NodeMeta, "duplicate variable name in same block: "+s.Name)
 		} else {
 			variableNames[s.Name] = true
 			ctx.varTypes[s.Name] = s.Type
@@ -164,7 +167,7 @@ func checkAssignStmtsInBlock(ctx *validateContext, block *ast.BlockStmt, scope m
 		case *ast.AssignStmt:
 			varType, ok := localScope[s.Name]
 			if !ok {
-				ctx.errors = append(ctx.errors, errors.New("assignment to undeclared variable: "+s.Name))
+				ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+s.Name)
 				continue
 			}
 
@@ -231,7 +234,7 @@ func checkNestedStmtForAssignStmts(ctx *validateContext, stmt ast.Stmt, scope ma
 	case *ast.AssignStmt:
 		varType, ok := scope[s.Name]
 		if !ok {
-			ctx.errors = append(ctx.errors, errors.New("assignment to undeclared variable: "+s.Name))
+			ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+s.Name)
 			return
 		}
 
@@ -253,17 +256,15 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 	switch e := expr.(type) {
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
-			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign string to %s",
-				ast.TypeToString(expectedType)))
+			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign string to "+ast.TypeToString(expectedType))
 		}
 	case *ast.BoolLiteralExpr:
 		if expectedType.Kind != ast.TypeBool {
-			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
-				ast.TypeToString(expectedType)))
+			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign bool to "+ast.TypeToString(expectedType))
 		}
 	case *ast.IntLiteralExpr:
 		if err := literalFitsType(e, false, expectedType); err != nil {
-			ctx.errors = append(ctx.errors, err)
+			ctx.addError(e.NodeMeta, err.Error())
 			return
 		}
 		e.InferredType = expectedType
@@ -278,7 +279,7 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 		}
 
 		if err := literalFitsType(lit, true, expectedType); err != nil {
-			ctx.errors = append(ctx.errors, err)
+			ctx.addError(e.NodeMeta, err.Error())
 			return
 		}
 
@@ -287,40 +288,47 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 	case *ast.IdentExpr:
 		declType, ok := scope[e.Name]
 		if !ok {
-			ctx.errors = append(ctx.errors, fmt.Errorf("undefined variable: %s", e.Name))
+			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
 			return
 		}
 		if declType.Kind != expectedType.Kind {
-			ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment to %s: cannot assign %s to %s",
-				e.Name, ast.TypeToString(declType), ast.TypeToString(expectedType)))
+			ctx.addError(e.NodeMeta, "type mismatch in assignment to "+e.Name+": cannot assign "+ast.TypeToString(declType)+" to "+ast.TypeToString(expectedType))
 		}
 	case *ast.BinaryExpr:
 		switch e.Op {
 		case token.Add, token.Sub, token.Mul, token.Div:
 			validateAssignExprType(ctx, scope, expectedType, e.Left)
 			validateAssignExprType(ctx, scope, expectedType, e.Right)
+
 			e.InferredType = expectedType
+
 		case token.EqEq, token.NotEq:
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
-					ast.TypeToString(expectedType)))
+				ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign bool to "+ast.TypeToString(expectedType))
 			}
+
 			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+
 			validateAssignExprType(ctx, scope, operandType, e.Left)
 			validateAssignExprType(ctx, scope, operandType, e.Right)
+
 			e.InferredType = ast.TypeBoolRef
+
 		case token.Lt, token.LtEq, token.Gt, token.GtEq:
 			if expectedType.Kind != ast.TypeBool {
-				ctx.errors = append(ctx.errors, fmt.Errorf("type mismatch in assignment: cannot assign bool to %s",
-					ast.TypeToString(expectedType)))
+				ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign bool to "+ast.TypeToString(expectedType))
 			}
+
 			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+
 			if !isIntegerType(operandType) {
-				ctx.errors = append(ctx.errors, fmt.Errorf("operator %s requires integer operands", ast.TokenTypeToString(e.Op)))
+				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer operands")
 				return
 			}
+
 			validateAssignExprType(ctx, scope, operandType, e.Left)
 			validateAssignExprType(ctx, scope, operandType, e.Right)
+
 			e.InferredType = ast.TypeBoolRef
 		}
 	}
@@ -330,9 +338,11 @@ func inferComparisonOperandTypeForScope(scope map[string]*ast.TypeRef, left, rig
 	if t := exprKnownTypeForScope(scope, left); t != nil {
 		return t
 	}
+
 	if t := exprKnownTypeForScope(scope, right); t != nil {
 		return t
 	}
+
 	return ast.TypeIntRef
 }
 

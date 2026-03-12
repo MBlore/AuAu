@@ -1,5 +1,7 @@
 package "main"
 
+extern 
+
 void main() {
     print(1)
 }
