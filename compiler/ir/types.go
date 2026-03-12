@@ -14,6 +14,7 @@ const (
 	TypePtr
 	TypeString
 	TypeBool
+	TypeVoid
 )
 
 type Type struct {
@@ -34,6 +35,7 @@ const (
 
 type IRProgram struct {
 	Functions []*Function
+	Externs   []*Extern
 }
 
 // IRValue represents a value in the IR, which can be an SSA value or an address.
@@ -55,7 +57,14 @@ const (
 	OpNeg
 	OpLoad
 	OpStore
+
+	// OpCall requires the following on Instr:
+	// - Callee string: the name of the function being called.
+	// - Args []IRValue: the arguments to the function.
+	// - Type: the return type of the function (for non-void).
+	// - Dest: the destination value for the return value (for non-void).
 	OpCall
+
 	OpCmp
 	OpBranch
 	OpJump
@@ -75,12 +84,19 @@ type Instr struct {
 	TrueBlock  *Block    // For OpBranch, the block to jump to if the condition is true.
 	FalseBlock *Block    // For OpBranch, the block to jump to if the condition is false.
 	JumpBlock  *Block    // For OpJump, the block to jump to unconditionally.
+	Callee     string    // For OpCall, the function being called.
 }
 
 type Function struct {
 	Name   string
 	Public bool
 	Blocks []*Block
+}
+
+type Extern struct {
+	Name   string
+	Args   []Type
+	Return Type
 }
 
 type Block struct {

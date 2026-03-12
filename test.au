@@ -1,6 +1,6 @@
 package "main"
 
-extern 
+extern void print(string text)
 
 void main() {
     print(1)

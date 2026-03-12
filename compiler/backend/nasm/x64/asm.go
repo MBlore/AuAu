@@ -17,6 +17,12 @@ func Compile(outFilename string, program *ir.IRProgram) error {
 	b.WriteString("default rel\n")
 	b.WriteString("extern au_rt_setconsoleoutput\n")
 	b.WriteString("extern printf\n")
+
+	// Write the user externs as NASM externs.
+	for _, ext := range program.Externs {
+		b.WriteString("extern " + ext.Name + "\n")
+	}
+
 	b.WriteString("\nsection .rdata\n")
 	b.WriteString("  fmt_int db \"%lld\", 10, 0\n")
 

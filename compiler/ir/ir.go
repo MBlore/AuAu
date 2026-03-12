@@ -29,6 +29,15 @@ type Lowerer struct {
 func CompileFile(file *ast.File) (*IRProgram, error) {
 	prog := &IRProgram{}
 
+	for _, ext := range file.Externs {
+		irExt, err := buildExtern(ext)
+		if err != nil {
+			return nil, err
+		}
+
+		prog.Externs = append(prog.Externs, irExt)
+	}
+
 	for _, fn := range file.Functions {
 		irFn, err := buildFunction(fn)
 		if err != nil {
@@ -39,6 +48,22 @@ func CompileFile(file *ast.File) (*IRProgram, error) {
 	}
 
 	return prog, nil
+}
+
+func buildExtern(ext *ast.ExternFuncStmt) (*Extern, error) {
+	irExt := &Extern{
+		Name:   ext.Name,
+		Args:   []Type{},
+		Return: Type{},
+	}
+
+	for _, argType := range ext.Params {
+		irExt.Args = append(irExt.Args, irTypeFromAstType(argType.Type))
+	}
+
+	irExt.Return = irTypeFromAstType(ext.ReturnType)
+
+	return irExt, nil
 }
 
 // buildFunction creates a new IR function and emits instructions for the function body.
@@ -427,8 +452,14 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 		return Type{Kind: TypeString}
 	case ast.TypeBool:
 		return Type{Kind: TypeBool}
+	case ast.TypeByte:
+		return Type{Kind: TypeU8}
+	case ast.TypeRune:
+		return Type{Kind: TypeI32}
+	case ast.TypeVoid:
+		return Type{Kind: TypeVoid}
 	default:
-		panic(fmt.Sprintf("unsupported AST type %T", astType))
+		panic(fmt.Sprintf("unsupported AST type %d", astType.Kind))
 	}
 }
 

@@ -30,7 +30,7 @@ func Validate(file *ast.File) []error {
 	ensureUniqueFunctionNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
 	ensureUniqueExternFuncNames(context)
-
+	ensureNoVoidVariables(context)
 	inferConstantTypes(context)
 
 	// Check AssignStmt for type correctness, e.g. assigning an int to a string variable should be an error.

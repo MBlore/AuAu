@@ -229,3 +229,36 @@ func (b *Builder) Jump(target *Block) {
 
 	b.current.Instrs = append(b.current.Instrs, instr)
 }
+
+func (b *Builder) Call(name string, returnType Type, args ...IRValue) IRValue {
+	if returnType.Kind == TypeVoid {
+		panic("use CallVoid for functions with void return type")
+	}
+
+	b.ensureBlock()
+
+	dest := b.NewValue()
+
+	instr := &Instr{
+		Op:     OpCall,
+		Dest:   dest,
+		Type:   returnType,
+		Args:   args,
+		Callee: name,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+	return dest
+}
+
+func (b *Builder) CallVoid(name string, args ...IRValue) {
+	b.ensureBlock()
+
+	instr := &Instr{
+		Op:     OpCall,
+		Args:   args,
+		Callee: name,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+}
