@@ -242,3 +242,12 @@ type ExternFuncStmt struct {
 }
 
 func (*ExternFuncStmt) isStmt() {}
+
+type CallExpr struct {
+	NodeMeta
+	FuncName     string
+	Args         []Expr
+	InferredType *TypeRef
+}
+
+func (*CallExpr) isExpr() {}

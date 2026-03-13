@@ -76,22 +76,26 @@ const (
 	// OpParam represents machine/ABI incoming params, not source-language params.
 	OpParam
 
+	// OpFieldAddr computes the address of a struct field.
+	OpFieldAddr
+
 	OpPrint // temporary opcode for testing purposes, to be removed later when print can be extern imported from C.
 )
 
 type Instr struct {
-	Op         OpCode    // The operation code of this instruction.
-	Dest       IRValue   // The destination value of this instruction, if any.
-	Type       Type      // The type of the value produced by this instruction, if any.
-	Args       []IRValue // For OpLoad and OpStore, the address is stored here.
-	Const      uint64    // For OpLoad and OpStore, the address is stored here.
-	Data       []byte    // For OpStringConst, the string data is stored here.
-	Cmp        CmpKind   // For OpCmp, the kind of comparison.
-	TrueBlock  *Block    // For OpBranch, the block to jump to if the condition is true.
-	FalseBlock *Block    // For OpBranch, the block to jump to if the condition is false.
-	JumpBlock  *Block    // For OpJump, the block to jump to unconditionally.
-	Callee     string    // For OpCall, the function being called.
-	ParamIndex int       // For OpParam, the index of the incoming parameter.
+	Op          OpCode    // The operation code of this instruction.
+	Dest        IRValue   // The destination value of this instruction, if any.
+	Type        Type      // The type of the value produced by this instruction, if any.
+	Args        []IRValue // For OpLoad and OpStore, the address is stored here.
+	Const       uint64    // For OpLoad and OpStore, the address is stored here.
+	Data        []byte    // For OpStringConst, the string data is stored here.
+	Cmp         CmpKind   // For OpCmp, the kind of comparison.
+	TrueBlock   *Block    // For OpBranch, the block to jump to if the condition is true.
+	FalseBlock  *Block    // For OpBranch, the block to jump to if the condition is false.
+	JumpBlock   *Block    // For OpJump, the block to jump to unconditionally.
+	Callee      string    // For OpCall, the function being called.
+	ParamIndex  int       // ParamIndex is the flattened ABI argument index.
+	FieldOffset int       // For OpFieldAddr, byte offset from the base aggregate address.
 }
 
 type Function struct {

@@ -280,3 +280,22 @@ func (b *Builder) Param(tp Type, index int) IRValue {
 	b.current.Instrs = append(b.current.Instrs, instr)
 	return dest
 }
+
+// FieldAddr creates a new instruction to compute the address of a field given a base pointer
+// and field offset, and returns the computed address.
+func (b *Builder) FieldAddr(base IRValue, offset int, elem Type) IRValue {
+	b.ensureBlock()
+
+	dest := b.NewValue()
+
+	instr := &Instr{
+		Op:          OpFieldAddr,
+		Dest:        dest,
+		Type:        PtrType(elem),
+		Args:        []IRValue{base},
+		FieldOffset: offset,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+	return dest
+}

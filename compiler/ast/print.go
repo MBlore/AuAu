@@ -146,6 +146,11 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 	pad := strings.Repeat("  ", indent)
 
 	switch e := expr.(type) {
+	case *CallExpr:
+		fmt.Fprintf(&p.buff, "%sCallExpr %s\n", pad, e.FuncName)
+		for _, arg := range e.Args {
+			p.printExpr(arg, indent+1)
+		}
 	case *IdentExpr:
 		fmt.Fprintf(&p.buff, "%sIdentExpr(%s)\n", pad, e.Name)
 	case *IntLiteralExpr:

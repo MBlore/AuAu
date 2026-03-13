@@ -388,6 +388,8 @@ func exprKnownTypeForScope(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.Ty
 		return ast.TypeStringRef
 	case *ast.FloatLiteralExpr:
 		return e.InferredType
+	case *ast.CallExpr:
+		return e.InferredType
 	default:
 		return nil
 	}

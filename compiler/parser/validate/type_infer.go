@@ -74,6 +74,11 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 
 	// Now we look for IntLiteralExpr in the expression graph and set their type to the inferred type.
 	switch e := expr.(type) {
+	case *ast.CallExpr:
+		e.InferredType = expectedType
+		for _, arg := range e.Args {
+			inferExprDefaultType(ctx, scope, arg)
+		}
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
 			ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got string")
@@ -287,6 +292,8 @@ func inferComparisonOperandType(scope map[string]*ast.TypeRef, left, right ast.E
 // exprKnownType checks if the expression is a literal or identifier with a known type, and returns that type if so.
 func exprKnownType(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
 	switch e := expr.(type) {
+	case *ast.CallExpr:
+		return e.InferredType
 	case *ast.IdentExpr:
 		return scope[e.Name]
 	case *ast.IntLiteralExpr:
@@ -338,6 +345,8 @@ func isFloatType(t *ast.TypeRef) bool {
 // This is used for literals and binary expressions where the type can be inferred from the context.
 func inferExprDefaultType(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) {
 	switch e := expr.(type) {
+	case *ast.CallExpr:
+		e.InferredType = ast.TypeIntRef
 	case *ast.StringLiteralExpr:
 		validateExprType(ctx, scope, ast.TypeStringRef, e)
 	case *ast.BoolLiteralExpr:

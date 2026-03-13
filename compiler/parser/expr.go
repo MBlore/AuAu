@@ -62,7 +62,43 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 	switch tok.Type {
 	case token.Ident:
 		p.advance()
+
+		// If the next token is a '(', then this is a function call, otherwise it's just an identifier.
+		if p.peek().Type == token.LParen {
+			call := &ast.CallExpr{
+				FuncName: tok.Literal,
+				NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
+			}
+
+			p.advance() // skip '('
+
+			args := []ast.Expr{}
+
+			for p.peek().Type != token.RParen {
+				arg, err := p.parseNewExpr()
+				if err != nil {
+					return nil, fmt.Errorf("invalid argument expression in function call: %w", err)
+				}
+
+				args = append(args, arg)
+
+				if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
+					return nil, errors.New("expected ',' or ')' after function call argument")
+				}
+
+				if p.peek().Type == token.Comma {
+					p.advance()
+				}
+			}
+
+			p.advance() // skip ')'
+
+			call.Args = args
+			return call, nil
+		}
+
 		return &ast.IdentExpr{Name: tok.Literal, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
+
 	case token.LParen:
 		p.advance()
 

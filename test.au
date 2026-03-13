@@ -2,6 +2,30 @@ package "main"
 
 extern void print(string text)
 
+string identity(string text) {
+    return text
+}
+
+string greet() {
+    return "hello from function"
+}
+
+float64 half() {
+    return 0.5
+}
+
 void main() {
-    print(1)
+    string a = "input string"
+    string b = identity(a)
+    string c = greet()
+    float64 x = half()
+
+    print(a)
+    print(b)
+    print(c)
+
+    // Keep the float result alive so the compiler has to lower the call and return path.
+    if x == 0.5 {
+        print("float ok")
+    }
 }

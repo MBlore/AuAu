@@ -179,43 +179,24 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 
 		// Function call?
 		if p.peekAhead(1).Type == token.LParen {
-			fc := &ast.CallStmt{
-				FuncName: tok.Literal,
-				NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
+			expr, err := p.parseNewExpr()
+			if err != nil {
+				return nil, fmt.Errorf("invalid function call expression: %w", err)
 			}
 
-			// Skip the function name token and the opening parenthesis.
-			p.advance()
-			p.advance()
-
-			// Parse arguments until we reach the closing parenthesis.
-			args := []ast.Expr{}
-			for p.peek().Type != token.RParen {
-				arg, err := p.parseNewExpr()
-				if err != nil {
-					return nil, fmt.Errorf("invalid argument expression in function call: %w", err)
-				}
-				args = append(args, arg)
-
-				// Next token must be comma or closing parenthesis.
-				if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
-					return nil, errors.New("expected ',' or ')' after function call argument")
-				}
-
-				// If the next token is a comma, skip it and continue parsing arguments.
-				if p.peek().Type == token.Comma {
-					p.advance()
-				}
+			call, ok := expr.(*ast.CallExpr)
+			if !ok {
+				return nil, errors.New("expected function call")
 			}
 
-			// Skip the closing parenthesis.
-			p.advance()
-
-			fc.Args = args
-			return fc, nil
-		} else {
-			return nil, errors.New("unexpected identifier")
+			return &ast.CallStmt{
+				FuncName: call.FuncName,
+				Args:     call.Args,
+				NodeMeta: call.NodeMeta,
+			}, nil
 		}
+
+		return nil, errors.New("unexpected identifier")
 	case token.Return:
 
 		p.advance()

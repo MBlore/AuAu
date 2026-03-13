@@ -9,9 +9,23 @@ import (
 	"github.com/MBlore/AuAu/token"
 )
 
+// varInfo holds the address and type of a variable in the current scope.
 type varInfo struct {
 	addr IRValue
 	typ  Type
+}
+
+// abiParam represents a parameter in the function signature, used for externs and function definitions.
+type abiParam struct {
+	name string
+	typ  Type
+}
+
+// fnSig represents the signature of a function, including its argument types, return type, and whether it's an extern.
+type fnSig struct {
+	args   []Type
+	ret    Type
+	extern bool
 }
 
 // Lowerer holds state for a single build file pass.
@@ -24,11 +38,26 @@ type Lowerer struct {
 	// loops is a stack used for entering and exiting loops,
 	// to help break/continue statements find the correct target blocks.
 	loops []loopContext
+
+	// funcs tracks function signatures for all defined functions.
+	funcs map[string]fnSig
+
+	// For functions that return aggregate-like types (currently just strings)
+	// we need to pass a hidden sret pointer parameter for the return value.
+	// This tracks the IRValue for that hidden parameter if it exists so we can
+	// store the return value to it before returning.
+	returnAddr IRValue
+
+	// hasReturnAddr tracks whether the current function has a hidden sret pointer parameter.
+	// This is needed to know whether to store the return value to the returnAddr before returning.
+	hasReturnAddr bool
 }
 
 // CompileFile converts the AST to IR. This is a simple traversal that emits IR instructions based on the AST nodes.
 func CompileFile(file *ast.File) (*IRProgram, error) {
 	prog := &IRProgram{}
+
+	funcs := make(map[string]fnSig)
 
 	for _, ext := range file.Externs {
 		irExt, err := buildExtern(ext)
@@ -36,11 +65,31 @@ func CompileFile(file *ast.File) (*IRProgram, error) {
 			return nil, err
 		}
 
+		// Record the function sig.
+		funcs[irExt.Name] = fnSig{
+			args:   irExt.Args,
+			ret:    irExt.Return,
+			extern: true,
+		}
+
 		prog.Externs = append(prog.Externs, irExt)
 	}
 
+	// Record function signatures for all functions before building them, so that calls to other functions can find the sigs.
 	for _, fn := range file.Functions {
-		irFn, err := buildFunction(fn)
+		args := make([]Type, 0, len(fn.Params))
+		for _, p := range fn.Params {
+			args = append(args, irTypeFromAstType(p.Type))
+		}
+
+		funcs[fn.Name] = fnSig{
+			args: args,
+			ret:  irTypeFromAstType(fn.ReturnType),
+		}
+	}
+
+	for _, fn := range file.Functions {
+		irFn, err := buildFunction(fn, funcs)
 		if err != nil {
 			return nil, err
 		}
@@ -68,53 +117,148 @@ func buildExtern(ext *ast.ExternFuncStmt) (*Extern, error) {
 }
 
 // buildFunction creates a new IR function and emits instructions for the function body.
-func buildFunction(fn *ast.FuncDecl) (*Function, error) {
+func buildFunction(fn *ast.FuncDecl, funcs map[string]fnSig) (*Function, error) {
 	// Builder helps emit opcodes and the lowerer holds state across the process.
 	builder := NewBuilder(fn.Name, fn.IsPublic)
 
 	l := &Lowerer{
 		builder: builder,
-	}
-
-	// We have to check if the main outer block of the function has a return.
-	// Its valid for a void return function to not have one in the AST but we have
-	// ensure at the IR/Backend level that all functions have a return instruction.
-	hasReturn := false
-
-	for _, st := range fn.Body.Stmts {
-		if _, ok := st.(*ast.ReturnStmt); ok {
-			hasReturn = true
-			break
-		}
+		funcs:   funcs,
 	}
 
 	// Create function-scope variables for the parameters before the body so they can be used in the body.
 	l.pushScope()
 	defer l.popScope()
 
-	for i, param := range fn.Params {
-		paramType := irTypeFromAstType(param.Type)
-		paramVal := l.builder.Param(paramType, i)
-		addr := l.builder.Alloc(paramType)
-
-		l.currentScope()[param.Name] = varInfo{addr: addr, typ: paramType}
-
-		// Store the parameter value in its address so it can be loaded later.
-		l.builder.Store(addr, paramVal)
-	}
-
-	// Now emit the function body block.
-	err := l.emitBlock(fn.Body)
-	if err != nil {
+	// Emit param binds.
+	if err := l.bindFunctionParams(fn); err != nil {
 		return nil, err
 	}
 
-	// If there was no return, emit a default one.
-	if !hasReturn {
+	// Emit the body.
+	if err := l.emitBlock(fn.Body); err != nil {
+		return nil, err
+	}
+
+	retType := irTypeFromAstType(fn.ReturnType)
+
+	// Only void functions get an implicit trailing return.
+	if retType.Kind == TypeVoid && !blockTerminated(builder.CurrentBlock()) {
 		builder.Return()
 	}
 
 	return builder.Function(), nil
+}
+
+// buildStackFrame constructs a stack frame for the given function by looking for all instructions
+// that produce values that need to be stored on the stack. It tracks the offset and type of
+// each value for use in code generation.
+func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
+	abiParams := flattenFunctionABIParams(fn)
+	abiIndex := 0
+
+	if irTypeFromAstType(fn.ReturnType).Kind == TypeString {
+		retPtrVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
+		l.returnAddr = retPtrVal
+		l.hasReturnAddr = true
+		abiIndex++
+	}
+
+	for _, param := range fn.Params {
+		paramType := irTypeFromAstType(param.Type)
+
+		switch paramType.Kind {
+		case TypeString:
+			// For strings, we have a hidden sret pointer for the return value, and for
+			// parameters we pass the pointer and length as separate parameters.
+			ptrVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
+			abiIndex++
+
+			lenVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
+			abiIndex++
+
+			// Create an alloc for the string parameter and store the pointer and length to it.
+			addr := l.builder.Alloc(paramType)
+
+			// Remember the variable name and its address.
+			if _, exists := l.currentScope()[param.Name]; exists {
+				panic(fmt.Sprintf("parameter %s already declared", param.Name))
+			}
+
+			l.currentScope()[param.Name] = varInfo{
+				addr: addr,
+				typ:  paramType,
+			}
+
+			// The pointer is at offset 0 and the length is at offset 8 in the allocated struct.
+			ptrAddr := l.builder.FieldAddr(addr, 0, Type{Kind: TypePtr})
+			lenAddr := l.builder.FieldAddr(addr, 8, Type{Kind: TypeI64})
+
+			// Store the pointer and length to the parameter's address.
+			l.builder.Store(ptrAddr, ptrVal)
+			l.builder.Store(lenAddr, lenVal)
+		default:
+			paramVal := l.builder.Param(paramType, abiIndex)
+			abiIndex++
+
+			addr := l.builder.Alloc(paramType)
+
+			if _, exists := l.currentScope()[param.Name]; exists {
+				panic(fmt.Sprintf("parameter %s already declared", param.Name))
+			}
+
+			l.currentScope()[param.Name] = varInfo{
+				addr: addr,
+				typ:  paramType,
+			}
+
+			l.builder.Store(addr, paramVal)
+		}
+	}
+
+	return nil
+}
+
+// buildStackFrame constructs a stack frame for the given function by looking for all instructions
+// that produce values that need to be stored on the stack. It tracks the offset and type of
+// each value for use in code generation.
+func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
+	params := make([]abiParam, 0, len(fn.Params)+1)
+
+	// Hidden sret pointer for aggregate-like returns.
+	if irTypeFromAstType(fn.ReturnType).Kind == TypeString {
+		retType := irTypeFromAstType(fn.ReturnType)
+		params = append(params, abiParam{
+			name: "__ret_ptr",
+			typ:  PtrType(retType),
+		})
+	}
+
+	for _, param := range fn.Params {
+		t := irTypeFromAstType(param.Type)
+
+		switch t.Kind {
+		case TypeString:
+			params = append(params,
+				abiParam{
+					name: param.Name + ".__ptr",
+					typ:  Type{Kind: TypePtr},
+				},
+				abiParam{
+					name: param.Name + ".__len",
+					typ:  Type{Kind: TypeI64},
+				},
+			)
+
+		default:
+			params = append(params, abiParam{
+				name: param.Name,
+				typ:  t,
+			})
+		}
+	}
+
+	return params
 }
 
 // emitBlock iterates over the statements in the given block and emits instructions.
@@ -214,16 +358,50 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 
 			l.builder.Print(val)
 		} else {
-			panic(fmt.Sprintf("unsupported function call: %s", s.FuncName))
+			// Look up the function signature for the called function.
+			sig, ok := l.funcs[s.FuncName]
+			if !ok {
+				return fmt.Errorf("unknown function: %s", s.FuncName)
+			}
+
+			// Check that the number of arguments matches the function signature.
+			if len(sig.args) != len(s.Args) {
+				return fmt.Errorf("function %s expects %d arguments, got %d", s.FuncName, len(sig.args), len(s.Args))
+			}
+
+			// Emit instructions for each argument expression and collect their IRValues.
+			args := make([]IRValue, 0, len(s.Args))
+			for _, argExpr := range s.Args {
+				argVal, err := l.emitExpr(argExpr)
+				if err != nil {
+					return fmt.Errorf("invalid argument to %s: %w", s.FuncName, err)
+				}
+				args = append(args, argVal)
+			}
+
+			// Emit the call instruction.
+			if sig.ret.Kind == TypeVoid {
+				l.builder.CallVoid(s.FuncName, args...)
+			} else {
+				_ = l.builder.Call(s.FuncName, sig.ret, args...)
+			}
 		}
 	case *ast.ReturnStmt:
 		if s.ReturnExpr != nil {
+			// Emit instructions for the return value expression.
 			val, err := l.emitExpr(s.ReturnExpr)
 			if err != nil {
 				return err
 			}
 
-			l.builder.Return(val)
+			// If the function has a hidden sret pointer parameter, store the return value to
+			// it before returning.
+			if l.hasReturnAddr {
+				l.builder.Store(l.returnAddr, val)
+				l.builder.Return()
+			} else {
+				l.builder.Return(val)
+			}
 		} else {
 			l.builder.Return()
 		}
@@ -324,6 +502,38 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
+	case *ast.CallExpr:
+		// Emit instructions for the function call.
+		sig, ok := l.funcs[e.FuncName]
+		if !ok {
+			return 0, fmt.Errorf("unknown function: %s", e.FuncName)
+		}
+
+		// Check that the number of arguments matches the function signature.
+		if len(sig.args) != len(e.Args) {
+			return 0, fmt.Errorf("function %s expects %d arguments, got %d", e.FuncName, len(sig.args), len(e.Args))
+		}
+
+		// Emit instructions for each argument expression and collect their IRValues.
+		args := make([]IRValue, 0, len(e.Args))
+
+		for _, argExpr := range e.Args {
+			argVal, err := l.emitExpr(argExpr)
+
+			if err != nil {
+				return 0, fmt.Errorf("invalid argument to %s: %w", e.FuncName, err)
+			}
+
+			args = append(args, argVal)
+		}
+
+		// Dont allow function calls in expressions if the function returns void.
+		if sig.ret.Kind == TypeVoid {
+			return 0, fmt.Errorf("void function %s cannot be used as an expression", e.FuncName)
+		}
+
+		return l.builder.Call(e.FuncName, sig.ret, args...), nil
+
 	case *ast.FloatLiteralExpr:
 		t := irTypeFromAstType(e.InferredType)
 

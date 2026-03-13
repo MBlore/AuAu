@@ -73,7 +73,8 @@ func opCodeProducesValue(op ir.OpCode) bool {
 		ir.OpCmp,
 		ir.OpStringConst,
 		ir.OpCall,
-		ir.OpParam:
+		ir.OpParam,
+		ir.OpFieldAddr:
 		return true
 	default:
 		return false

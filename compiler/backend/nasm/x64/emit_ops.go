@@ -10,18 +10,81 @@ import (
 // emitOpCode emits the assembly code for a given IR instruction based on its OpCode.
 func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabels map[*ir.Instr]string, fn *ir.Function) {
 	switch instr.Op {
+	case ir.OpFieldAddr:
+		// Get the base address of the struct from Arg0, then add the field offset to it.
+		baseType := valueType(frame, instr.Args[0])
+		if baseType.Kind != ir.TypePtr || baseType.Elem == nil {
+			panic("invalid field address operation: base is not a pointer")
+		}
+
+		fmt.Fprintf(b, "  mov rax, qword %s\n", slot(frame, instr.Args[0]))
+		if instr.FieldOffset != 0 {
+			fmt.Fprintf(b, "  add rax, %d\n", instr.FieldOffset)
+		}
+
+		fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
 	case ir.OpCall:
 		emitCall(b, instr, frame)
 
 	case ir.OpParam:
-		// Move the parameter from the appropriate register to the stack slot for this parameter.
+		// Move the parameter into the appropriate register or stack slot based on its index and type.
+		if instr.ParamIndex < 4 {
+			// First 4 parameters are passed in registers according to the Windows x64 calling convention.
+			switch instr.Type.Kind {
+			case ir.TypeFloat32:
+				fmt.Fprintf(b, "  movss dword %s, %s\n", slot(frame, instr.Dest), callFloatArgReg(instr.ParamIndex))
+			case ir.TypeFloat64:
+				fmt.Fprintf(b, "  movsd qword %s, %s\n", slot(frame, instr.Dest), callFloatArgReg(instr.ParamIndex))
+			default:
+				fmt.Fprintf(b, "  mov qword %s, %s\n", slot(frame, instr.Dest), callIntArgReg(instr.ParamIndex))
+			}
+			break
+		}
+
+		// Stack-passed parameters start at [rbp+16] after the prologue.
+		offset := incomingStackArgOffset(instr.ParamIndex)
+
+		// Load the parameter from the stack into RAX, then move it to the destination slot with proper size handling.
 		switch instr.Type.Kind {
 		case ir.TypeFloat32:
-			fmt.Fprintf(b, "  movss dword %s, %s\n", slot(frame, instr.Dest), callFloatArgReg(instr.ParamIndex))
+			fmt.Fprintf(b, "  mov eax, dword [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov dword %s, eax\n", slot(frame, instr.Dest))
+
 		case ir.TypeFloat64:
-			fmt.Fprintf(b, "  movsd qword %s, %s\n", slot(frame, instr.Dest), callFloatArgReg(instr.ParamIndex))
+			fmt.Fprintf(b, "  mov rax, qword [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeI32:
+			fmt.Fprintf(b, "  movsxd rax, dword [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeU32:
+			fmt.Fprintf(b, "  mov eax, dword [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeI16:
+			fmt.Fprintf(b, "  movsx rax, word [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeU16:
+			fmt.Fprintf(b, "  movzx eax, word [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeI8:
+			fmt.Fprintf(b, "  movsx rax, byte [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeU8, ir.TypeBool:
+			fmt.Fprintf(b, "  movzx eax, byte [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
+		case ir.TypeI64, ir.TypeU64, ir.TypePtr:
+			fmt.Fprintf(b, "  mov rax, qword [rbp+%d]\n", offset)
+			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
+
 		default:
-			fmt.Fprintf(b, "  mov qword %s, %s\n", slot(frame, instr.Dest), callIntArgReg(instr.ParamIndex))
+			panic(fmt.Sprintf("unsupported param type: %d", instr.Type.Kind))
 		}
 
 	case ir.OpBranch:
@@ -229,12 +292,20 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
 	case ir.OpReturn:
 		// Write the function epilogue and return.
-		// Single return value goes in rax.
-		// Multiple return values require allocated memory from the caller with a pointer
-		// passed as an arguement that we use to store a return value in.
+		// Making sure we capture float returns properly in XMM0 as the return register.
 		if len(instr.Args) > 0 {
-			fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			retType := valueType(frame, instr.Args[0])
+
+			switch retType.Kind {
+			case ir.TypeFloat32:
+				fmt.Fprintf(b, "  movss xmm0, dword %s\n", slot(frame, instr.Args[0]))
+			case ir.TypeFloat64:
+				fmt.Fprintf(b, "  movsd xmm0, qword %s\n", slot(frame, instr.Args[0]))
+			default:
+				fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			}
 		}
+
 		fmt.Fprintf(b, "  mov rsp, rbp\n")
 		fmt.Fprintf(b, "  pop rbp\n")
 		fmt.Fprintf(b, "  ret\n")
@@ -461,4 +532,20 @@ func emitLoadIntoRAX(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 	default:
 		panic(fmt.Sprintf("unsupported load type: %d", instr.Type.Kind))
 	}
+}
+
+// incomingStackArgOffset returns the stack offset for a given parameter index for parameters passed
+// on the stack according to the Windows x64 calling convention.
+func incomingStackArgOffset(paramIndex int) int {
+	if paramIndex < 4 {
+		panic(fmt.Sprintf("param index %d is register-passed, not stack-passed", paramIndex))
+	}
+
+	// At callee entry after:
+	//   call        -> pushes return address
+	//   push rbp
+	//   mov rbp, rsp
+	//
+	// the first stack-passed argument is at [rbp+16].
+	return 16 + ((paramIndex - 4) * 8)
 }

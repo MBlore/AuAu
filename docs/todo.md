@@ -10,3 +10,4 @@
 - Try/Catch
 - Functions void return?
 - hidden string-return ABI complexity is introduced yet
+- string params in functions
