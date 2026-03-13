@@ -183,8 +183,22 @@ func (l *Lexer) nextToken() (token.Token, error) {
 				l.advance()
 			}
 
-			// Build the number token where the literal will include the base prefix.
-			// The parser will handle parsing of the base prefix.
+			// Handle float literals.
+			isFloat := false
+			if l.peek() == '.' {
+				isFloat = true
+				l.advance() // skip '.'
+
+				// Fast forward until we hit a non-digit character.
+				for unicode.IsDigit(l.peek()) {
+					l.advance()
+				}
+			}
+
+			if isFloat {
+				return token.Token{Type: token.Float, Literal: string(l.src[savedIdx:l.pos]), Line: startLine, Col: startCol}, nil
+			}
+
 			return token.Token{Type: token.Number, Literal: string(l.src[savedIdx:l.pos]), Line: startLine, Col: startCol}, nil
 		}
 

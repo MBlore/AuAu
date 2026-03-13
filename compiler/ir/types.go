@@ -15,6 +15,8 @@ const (
 	TypeString
 	TypeBool
 	TypeVoid
+	TypeFloat32
+	TypeFloat64
 )
 
 type Type struct {
@@ -70,6 +72,10 @@ const (
 	OpJump
 	OpReturn
 	OpAlloc
+
+	// OpParam represents machine/ABI incoming params, not source-language params.
+	OpParam
+
 	OpPrint // temporary opcode for testing purposes, to be removed later when print can be extern imported from C.
 )
 
@@ -85,6 +91,7 @@ type Instr struct {
 	FalseBlock *Block    // For OpBranch, the block to jump to if the condition is false.
 	JumpBlock  *Block    // For OpJump, the block to jump to unconditionally.
 	Callee     string    // For OpCall, the function being called.
+	ParamIndex int       // For OpParam, the index of the incoming parameter.
 }
 
 type Function struct {

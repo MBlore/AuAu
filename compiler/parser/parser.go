@@ -495,6 +495,15 @@ func (p *Parser) parseType() (*ast.TypeRef, error) {
 	case token.Int64Kw:
 		p.advance()
 		return ast.TypeInt64Ref, nil
+	case token.Float32Kw:
+		p.advance()
+		return ast.TypeFloat32Ref, nil
+	case token.Float64Kw:
+		p.advance()
+		return ast.TypeFloat64Ref, nil
+	case token.FloatKw:
+		p.advance()
+		return ast.TypeFloatRef, nil
 	default:
 		return nil, errors.New("unexpected token, expecting type")
 	}

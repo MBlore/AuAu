@@ -25,6 +25,9 @@ const (
 	TypeByte
 	TypeRune
 	TypeString
+	TypeFloat32
+	TypeFloat64
+	TypeFloat
 )
 
 type TypeRef struct {
@@ -32,21 +35,24 @@ type TypeRef struct {
 }
 
 var (
-	TypeVoidRef   = &TypeRef{Kind: TypeVoid}
-	TypeIntRef    = &TypeRef{Kind: TypeInt}
-	TypeInt64Ref  = &TypeRef{Kind: TypeInt64}
-	TypeInt32Ref  = &TypeRef{Kind: TypeInt32}
-	TypeInt16Ref  = &TypeRef{Kind: TypeInt16}
-	TypeInt8Ref   = &TypeRef{Kind: TypeInt8}
-	TypeUInt64Ref = &TypeRef{Kind: TypeUInt64}
-	TypeUInt32Ref = &TypeRef{Kind: TypeUInt32}
-	TypeUInt16Ref = &TypeRef{Kind: TypeUInt16}
-	TypeUInt8Ref  = &TypeRef{Kind: TypeUInt8}
-	TypeBoolRef   = &TypeRef{Kind: TypeBool}
-	TypeByteRef   = &TypeRef{Kind: TypeByte}
-	TypeRuneRef   = &TypeRef{Kind: TypeRune}
-	TypeStringRef = &TypeRef{Kind: TypeString}
-	TypeNullRef   = &TypeRef{Kind: TypeNull}
+	TypeVoidRef    = &TypeRef{Kind: TypeVoid}
+	TypeIntRef     = &TypeRef{Kind: TypeInt}
+	TypeInt64Ref   = &TypeRef{Kind: TypeInt64}
+	TypeInt32Ref   = &TypeRef{Kind: TypeInt32}
+	TypeInt16Ref   = &TypeRef{Kind: TypeInt16}
+	TypeInt8Ref    = &TypeRef{Kind: TypeInt8}
+	TypeUInt64Ref  = &TypeRef{Kind: TypeUInt64}
+	TypeUInt32Ref  = &TypeRef{Kind: TypeUInt32}
+	TypeUInt16Ref  = &TypeRef{Kind: TypeUInt16}
+	TypeUInt8Ref   = &TypeRef{Kind: TypeUInt8}
+	TypeBoolRef    = &TypeRef{Kind: TypeBool}
+	TypeByteRef    = &TypeRef{Kind: TypeByte}
+	TypeRuneRef    = &TypeRef{Kind: TypeRune}
+	TypeStringRef  = &TypeRef{Kind: TypeString}
+	TypeNullRef    = &TypeRef{Kind: TypeNull}
+	TypeFloat32Ref = &TypeRef{Kind: TypeFloat32}
+	TypeFloat64Ref = &TypeRef{Kind: TypeFloat64}
+	TypeFloatRef   = &TypeRef{Kind: TypeFloat}
 )
 
 // File is a collection of parsed source code for a single source file.
@@ -132,6 +138,14 @@ type IntLiteralExpr struct {
 }
 
 func (*IntLiteralExpr) isExpr() {}
+
+type FloatLiteralExpr struct {
+	NodeMeta
+	Literal      string
+	InferredType *TypeRef // This will be filled in during type inference.
+}
+
+func (*FloatLiteralExpr) isExpr() {}
 
 type StringLiteralExpr struct {
 	NodeMeta

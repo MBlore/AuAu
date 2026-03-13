@@ -29,6 +29,10 @@ func bitSize(t ir.Type) int {
 		return 64
 	case ir.TypeBool:
 		return 8
+	case ir.TypeFloat32:
+		return 32
+	case ir.TypeFloat64:
+		return 64
 	default:
 		panic("unsupported type kind")
 	}

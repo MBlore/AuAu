@@ -34,6 +34,7 @@ const (
 	BoolKw    TokenType = "BOOL_KW"
 	Float32Kw TokenType = "FLOAT32_KW"
 	Float64Kw TokenType = "FLOAT64_KW"
+	FloatKw   TokenType = "FLOAT_KW"
 
 	True     TokenType = "TRUE"
 	False    TokenType = "FALSE"
@@ -169,6 +170,8 @@ func LookupKeyword(ident string) TokenType {
 		return Float32Kw
 	case "float64":
 		return Float64Kw
+	case "float":
+		return FloatKw
 	case "true":
 		return True
 	case "false":

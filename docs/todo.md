@@ -1,3 +1,4 @@
+- Function Calling - 
 - Type casts int64(x) int32(somevar)
 - Float data types
 - i++, i--, i += 10, i -= 10
@@ -5,5 +6,7 @@
 - "i++" didnt fail parsing.
 - Pointers int *p = &other
 - Structs
-- Function Calling
 - Arrays
+- Try/Catch
+- Functions void return?
+- hidden string-return ABI complexity is introduced yet

@@ -2,6 +2,7 @@ package ir
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/MBlore/AuAu/ast"
@@ -80,14 +81,26 @@ func buildFunction(fn *ast.FuncDecl) (*Function, error) {
 	// ensure at the IR/Backend level that all functions have a return instruction.
 	hasReturn := false
 
-	// TODO: Returns are also valid in if/else blocks, loops, and possibly others.
-	// Semantic analysis should ensure that all code paths in a non-void function
-	// have a return, and that void functions don't return values.
 	for _, st := range fn.Body.Stmts {
 		if _, ok := st.(*ast.ReturnStmt); ok {
 			hasReturn = true
 			break
 		}
+	}
+
+	// Create function-scope variables for the parameters before the body so they can be used in the body.
+	l.pushScope()
+	defer l.popScope()
+
+	for i, param := range fn.Params {
+		paramType := irTypeFromAstType(param.Type)
+		paramVal := l.builder.Param(paramType, i)
+		addr := l.builder.Alloc(paramType)
+
+		l.currentScope()[param.Name] = varInfo{addr: addr, typ: paramType}
+
+		// Store the parameter value in its address so it can be loaded later.
+		l.builder.Store(addr, paramVal)
 	}
 
 	// Now emit the function body block.
@@ -311,6 +324,33 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 
 func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
+	case *ast.FloatLiteralExpr:
+		t := irTypeFromAstType(e.InferredType)
+
+		// Float bits are stored as a uint64 const.
+		switch t.Kind {
+		case TypeFloat32:
+			f, err := strconv.ParseFloat(e.Literal, 32)
+			if err != nil {
+				return 0, fmt.Errorf("invalid float literal %s: %w", e.Literal, err)
+			}
+
+			bits := math.Float32bits(float32(f))
+			return l.builder.Const(t, uint64(bits)), nil
+
+		case TypeFloat64:
+			f, err := strconv.ParseFloat(e.Literal, 64)
+			if err != nil {
+				return 0, fmt.Errorf("invalid float literal %s: %w", e.Literal, err)
+			}
+
+			bits := math.Float64bits(f)
+			return l.builder.Const(t, bits), nil
+
+		default:
+			return 0, fmt.Errorf("unsupported float type %v", e.InferredType)
+		}
+
 	case *ast.BoolLiteralExpr:
 		return l.builder.Const(Type{Kind: TypeBool}, boolToInt(e.Value)), nil
 	case *ast.StringLiteralExpr:
@@ -458,6 +498,12 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 		return Type{Kind: TypeI32}
 	case ast.TypeVoid:
 		return Type{Kind: TypeVoid}
+	case ast.TypeFloat32:
+		return Type{Kind: TypeFloat32}
+	case ast.TypeFloat64:
+		return Type{Kind: TypeFloat64}
+	case ast.TypeFloat:
+		return Type{Kind: TypeFloat64}
 	default:
 		panic(fmt.Sprintf("unsupported AST type %d", astType.Kind))
 	}

@@ -67,6 +67,12 @@ func TypeKindToString(t TypeKind) string {
 		return "rune"
 	case TypeString:
 		return "string"
+	case TypeFloat32:
+		return "float32"
+	case TypeFloat64:
+		return "float64"
+	case TypeFloat:
+		return "float"
 	}
 	return "unknown"
 }

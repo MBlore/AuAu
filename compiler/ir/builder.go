@@ -85,6 +85,7 @@ func (b *Builder) Neg(tp Type, val IRValue) IRValue {
 }
 
 // Const creates a new constant instruction and returns the destination value.
+// If value is a float, it will be reinterpreted as uint64 float bits.
 func (b *Builder) Const(tp Type, value uint64) IRValue {
 	b.ensureBlock()
 
@@ -261,4 +262,21 @@ func (b *Builder) CallVoid(name string, args ...IRValue) {
 	}
 
 	b.current.Instrs = append(b.current.Instrs, instr)
+}
+
+// Param creates a new parameter instruction for the given parameter index and type, and returns the parameter value.
+func (b *Builder) Param(tp Type, index int) IRValue {
+	b.ensureBlock()
+
+	dest := b.NewValue()
+
+	instr := &Instr{
+		Op:         OpParam,
+		Dest:       dest,
+		Type:       tp,
+		ParamIndex: index,
+	}
+
+	b.current.Instrs = append(b.current.Instrs, instr)
+	return dest
 }

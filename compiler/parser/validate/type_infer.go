@@ -85,23 +85,38 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		}
 
 		e.InferredType = expectedType
+	case *ast.FloatLiteralExpr:
+		if err := floatLiteralFitsType(e, expectedType); err != nil {
+			ctx.addError(e.NodeMeta, err.Error())
+			return
+		}
+
+		e.InferredType = expectedType
 	case *ast.UnaryExpr:
 		if e.Op != token.Sub {
 			return
 		}
 
-		lit, ok := e.Expr.(*ast.IntLiteralExpr)
-		if !ok {
-			// Its not an int literal, so skip.
+		switch lit := e.Expr.(type) {
+		case *ast.IntLiteralExpr:
+			if err := literalFitsType(lit, true, expectedType); err != nil {
+				ctx.addError(e.NodeMeta, err.Error())
+				return
+			}
+
+			lit.InferredType = expectedType
+		case *ast.FloatLiteralExpr:
+			if err := floatLiteralFitsType(lit, expectedType); err != nil {
+				ctx.addError(e.NodeMeta, err.Error())
+				return
+			}
+
+			lit.InferredType = expectedType
+		default:
+			ctx.addError(e.NodeMeta, "unary operator '-' requires integer or float literal operand")
 			return
 		}
 
-		if err := literalFitsType(lit, true, expectedType); err != nil {
-			ctx.addError(e.NodeMeta, err.Error())
-			return
-		}
-
-		lit.InferredType = expectedType
 		e.InferredType = expectedType
 	case *ast.BinaryExpr:
 		switch e.Op {
@@ -130,8 +145,8 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 
 			operandType := inferComparisonOperandType(scope, e.Left, e.Right)
 
-			if !isIntegerType(operandType) {
-				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer operands")
+			if !isIntegerType(operandType) && !isFloatType(operandType) {
+				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer or float operands")
 				return
 			}
 
@@ -228,6 +243,26 @@ func literalFitsType(lit *ast.IntLiteralExpr, negative bool, target *ast.TypeRef
 	return nil
 }
 
+// floatLiteralFitsType checks if a float literal can fit in the expected type.
+func floatLiteralFitsType(lit *ast.FloatLiteralExpr, target *ast.TypeRef) error {
+	switch target.Kind {
+	case ast.TypeFloat32:
+		if _, err := strconv.ParseFloat(lit.Literal, 32); err != nil {
+			return fmt.Errorf("invalid float literal %q for type float32", lit.Literal)
+		}
+
+	case ast.TypeFloat64, ast.TypeFloat:
+		if _, err := strconv.ParseFloat(lit.Literal, 64); err != nil {
+			return fmt.Errorf("invalid float literal %q for type %s", lit.Literal, ast.TypeToString(target))
+		}
+
+	default:
+		return fmt.Errorf("type %s is not a float type", ast.TypeToString(target))
+	}
+
+	return nil
+}
+
 // inferComparisonOperandType checks the left and right expressions of a comparison operator to see if either has a known type, and returns that type if so. If neither has a known type, it defaults to int.
 func inferComparisonOperandType(scope map[string]*ast.TypeRef, left, right ast.Expr) *ast.TypeRef {
 	if t := exprKnownType(scope, left); t != nil {
@@ -237,6 +272,15 @@ func inferComparisonOperandType(scope map[string]*ast.TypeRef, left, right ast.E
 		return t
 	}
 
+	// Check for floats.
+	if _, ok := left.(*ast.FloatLiteralExpr); ok {
+		return ast.TypeFloatRef
+	}
+	if _, ok := right.(*ast.FloatLiteralExpr); ok {
+		return ast.TypeFloatRef
+	}
+
+	// Must be ints if neither side is a float and we don't have any other information.
 	return ast.TypeIntRef
 }
 
@@ -246,6 +290,8 @@ func exprKnownType(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
 	case *ast.IdentExpr:
 		return scope[e.Name]
 	case *ast.IntLiteralExpr:
+		return e.InferredType
+	case *ast.FloatLiteralExpr:
 		return e.InferredType
 	case *ast.UnaryExpr:
 		return e.InferredType
@@ -275,6 +321,19 @@ func isIntegerType(t *ast.TypeRef) bool {
 	}
 }
 
+func isFloatType(t *ast.TypeRef) bool {
+	if t == nil {
+		return false
+	}
+
+	switch t.Kind {
+	case ast.TypeFloat, ast.TypeFloat32, ast.TypeFloat64:
+		return true
+	default:
+		return false
+	}
+}
+
 // inferExprDefaultType is used to infer the default type of an expression when we don't have any other information about what type it should be.
 // This is used for literals and binary expressions where the type can be inferred from the context.
 func inferExprDefaultType(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) {
@@ -287,10 +346,28 @@ func inferExprDefaultType(ctx *validateContext, scope map[string]*ast.TypeRef, e
 		switch e.Op {
 		case token.EqEq, token.NotEq, token.Lt, token.LtEq, token.Gt, token.GtEq:
 			validateExprType(ctx, scope, ast.TypeBoolRef, e)
+		case token.Add, token.Sub, token.Mul, token.Div:
+			if exprLooksFloat(scope, e.Left) || exprLooksFloat(scope, e.Right) {
+				validateExprType(ctx, scope, ast.TypeFloatRef, e)
+			} else {
+				validateExprType(ctx, scope, ast.TypeIntRef, e)
+			}
 		default:
 			validateExprType(ctx, scope, ast.TypeIntRef, e)
 		}
+	case *ast.FloatLiteralExpr:
+		validateExprType(ctx, scope, ast.TypeFloatRef, e)
 	default:
 		validateExprType(ctx, scope, ast.TypeIntRef, expr)
 	}
+}
+
+// exprLooksFloat checks if the expression is a float literal or an identifier with a known float type in the current scope.
+func exprLooksFloat(scope map[string]*ast.TypeRef, expr ast.Expr) bool {
+	if t := exprKnownType(scope, expr); t != nil {
+		return isFloatType(t)
+	}
+
+	_, ok := expr.(*ast.FloatLiteralExpr)
+	return ok
 }

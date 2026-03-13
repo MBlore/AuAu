@@ -268,22 +268,39 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 			return
 		}
 		e.InferredType = expectedType
+	case *ast.FloatLiteralExpr:
+		if err := floatLiteralFitsType(e, expectedType); err != nil {
+			ctx.addError(e.NodeMeta, err.Error())
+			return
+		}
+		e.InferredType = expectedType
 	case *ast.UnaryExpr:
 		if e.Op != token.Sub {
 			return
 		}
 
-		lit, ok := e.Expr.(*ast.IntLiteralExpr)
-		if !ok {
+		// Check expression is either a int or float literal, and if so, validate the literal fits the expected type.
+		switch lit := e.Expr.(type) {
+		case *ast.IntLiteralExpr:
+			if err := literalFitsType(lit, true, expectedType); err != nil {
+				ctx.addError(e.NodeMeta, err.Error())
+				return
+			}
+
+			lit.InferredType = expectedType
+		case *ast.FloatLiteralExpr:
+			if err := floatLiteralFitsType(lit, expectedType); err != nil {
+				ctx.addError(e.NodeMeta, err.Error())
+				return
+			}
+
+			lit.InferredType = expectedType
+
+		default:
+			ctx.addError(e.NodeMeta, "unary '-' operator can only be applied to int or float literals")
 			return
 		}
 
-		if err := literalFitsType(lit, true, expectedType); err != nil {
-			ctx.addError(e.NodeMeta, err.Error())
-			return
-		}
-
-		lit.InferredType = expectedType
 		e.InferredType = expectedType
 	case *ast.IdentExpr:
 		declType, ok := scope[e.Name]
@@ -321,8 +338,8 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 
 			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
 
-			if !isIntegerType(operandType) {
-				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer operands")
+			if !isIntegerType(operandType) && !isFloatType(operandType) {
+				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer or float operands")
 				return
 			}
 
@@ -343,9 +360,18 @@ func inferComparisonOperandTypeForScope(scope map[string]*ast.TypeRef, left, rig
 		return t
 	}
 
+	if _, ok := left.(*ast.FloatLiteralExpr); ok {
+		return ast.TypeFloatRef
+	}
+	if _, ok := right.(*ast.FloatLiteralExpr); ok {
+		return ast.TypeFloatRef
+	}
+
 	return ast.TypeIntRef
 }
 
+// exprKnownTypeForScope checks if the expression is a literal or identifier with a known type in the current scope, and returns that type if so.
+// This is used to help infer the type of comparison expressions when validating assignments, e.g. in 'x = 5 < 3.2'.
 func exprKnownTypeForScope(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
 	switch e := expr.(type) {
 	case *ast.IdentExpr:
@@ -360,6 +386,8 @@ func exprKnownTypeForScope(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.Ty
 		return ast.TypeBoolRef
 	case *ast.StringLiteralExpr:
 		return ast.TypeStringRef
+	case *ast.FloatLiteralExpr:
+		return e.InferredType
 	default:
 		return nil
 	}
