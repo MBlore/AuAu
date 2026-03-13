@@ -10,6 +10,8 @@ import (
 type stackFrame struct {
 	// Tracking of IRValues to stack slots.
 	slots map[ir.IRValue]int
+	// Tracking of OpAlloc IRValues to the base offset of their pointee storage.
+	allocBases map[ir.IRValue]int
 	// Tracking of IRValues to their types.
 	types map[ir.IRValue]ir.Type
 	// The total size of the stack frame.
@@ -19,8 +21,9 @@ type stackFrame struct {
 // buildStackFrame calculates the total stack frame size we need for the prologue of a function.
 func buildStackFrame(fn *ir.Function) *stackFrame {
 	frame := &stackFrame{
-		slots: make(map[ir.IRValue]int),
-		types: make(map[ir.IRValue]ir.Type),
+		slots:      make(map[ir.IRValue]int),
+		allocBases: make(map[ir.IRValue]int),
+		types:      make(map[ir.IRValue]ir.Type),
 	}
 
 	offset := 0
@@ -29,6 +32,22 @@ func buildStackFrame(fn *ir.Function) *stackFrame {
 	for _, block := range fn.Blocks {
 		for _, instr := range block.Instrs {
 			if opCodeProducesValue(instr.Op) {
+				if instr.Op == ir.OpAlloc {
+					if instr.Type.Kind != ir.TypePtr || instr.Type.Elem == nil {
+						panic("alloc must produce a pointer type with an element type")
+					}
+
+					// Reserve stack space for the pointee storage first.
+					offset += stackSize(*instr.Type.Elem)
+					frame.allocBases[instr.Dest] = offset
+
+					// Reserve a separate slot to hold the pointer value itself.
+					offset += 8
+					frame.slots[instr.Dest] = offset
+					frame.types[instr.Dest] = instr.Type
+					continue
+				}
+
 				// Move offset first to skip where RBP lives.
 				offset += stackSize(instr.Type)
 

@@ -11,7 +11,13 @@ import (
 type validateContext struct {
 	file     *ast.File
 	varTypes map[string]*ast.TypeRef
+	funcs    map[string]funcSig
 	errors   []error
+}
+
+type funcSig struct {
+	params     []*ast.TypeRef
+	returnType *ast.TypeRef
 }
 
 func (ctx *validateContext) addError(nodeMeta ast.NodeMeta, message string) {
@@ -23,7 +29,38 @@ func Validate(file *ast.File) []error {
 	context := &validateContext{
 		file:     file,
 		varTypes: make(map[string]*ast.TypeRef),
+		funcs:    make(map[string]funcSig),
 		errors:   []error{},
+	}
+
+	for _, fn := range file.Functions {
+		for _, param := range fn.Params {
+			context.varTypes[param.Name] = param.Type
+		}
+	}
+
+	for _, ext := range file.Externs {
+		params := make([]*ast.TypeRef, 0, len(ext.Params))
+		for _, param := range ext.Params {
+			params = append(params, param.Type)
+		}
+
+		context.funcs[ext.Name] = funcSig{
+			params:     params,
+			returnType: ext.ReturnType,
+		}
+	}
+
+	for _, fn := range file.Functions {
+		params := make([]*ast.TypeRef, 0, len(fn.Params))
+		for _, param := range fn.Params {
+			params = append(params, param.Type)
+		}
+
+		context.funcs[fn.Name] = funcSig{
+			params:     params,
+			returnType: fn.ReturnType,
+		}
 	}
 
 	ensurePackageDeclared(context)
@@ -152,7 +189,12 @@ func checkNestedStmtForDuplicateVariables(ctx *validateContext, stmt ast.Stmt) {
 
 func checkAssignStmts(ctx *validateContext) {
 	for _, fn := range ctx.file.Functions {
-		checkAssignStmtsInBlock(ctx, fn.Body, make(map[string]*ast.TypeRef))
+		scope := make(map[string]*ast.TypeRef, len(fn.Params))
+		for _, param := range fn.Params {
+			scope[param.Name] = param.Type
+		}
+
+		checkAssignStmtsInBlock(ctx, fn.Body, scope)
 	}
 }
 
@@ -252,8 +294,63 @@ func cloneTypeScope(scope map[string]*ast.TypeRef) map[string]*ast.TypeRef {
 	return clone
 }
 
+func lookupType(scope map[string]*ast.TypeRef, ctx *validateContext, name string) (*ast.TypeRef, bool) {
+	if t, ok := scope[name]; ok {
+		return t, true
+	}
+
+	t, ok := ctx.varTypes[name]
+	return t, ok
+}
+
+func validateCallExpr(ctx *validateContext, scope map[string]*ast.TypeRef, call *ast.CallExpr) *ast.TypeRef {
+	sig, ok := ctx.funcs[call.FuncName]
+	if !ok {
+		ctx.addError(call.NodeMeta, "unknown function: "+call.FuncName)
+		return nil
+	}
+
+	if len(sig.params) != len(call.Args) {
+		ctx.addError(call.NodeMeta, "function "+call.FuncName+" expects "+itoa(len(sig.params))+" arguments, got "+itoa(len(call.Args)))
+		call.InferredType = sig.returnType
+		return sig.returnType
+	}
+
+	for i, arg := range call.Args {
+		validateExprType(ctx, scope, sig.params[i], arg)
+	}
+
+	call.InferredType = sig.returnType
+	return sig.returnType
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+
+	buf := [20]byte{}
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + (n % 10))
+		n /= 10
+	}
+
+	return string(buf[i:])
+}
+
 func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expectedType *ast.TypeRef, expr ast.Expr) {
 	switch e := expr.(type) {
+	case *ast.CallExpr:
+		retType := validateCallExpr(ctx, scope, e)
+		if retType == nil {
+			return
+		}
+
+		if retType.Kind != expectedType.Kind {
+			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign "+ast.TypeToString(retType)+" to "+ast.TypeToString(expectedType))
+		}
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
 			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign string to "+ast.TypeToString(expectedType))
@@ -303,7 +400,7 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 
 		e.InferredType = expectedType
 	case *ast.IdentExpr:
-		declType, ok := scope[e.Name]
+		declType, ok := lookupType(scope, ctx, e.Name)
 		if !ok {
 			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
 			return

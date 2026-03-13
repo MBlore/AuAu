@@ -54,6 +54,32 @@ func InstrToString(instr *Instr) string {
 			string(instr.Data),
 			instr.Data,
 		)
+	case OpCall:
+		args := make([]string, 0, len(instr.Args))
+		for _, arg := range instr.Args {
+			args = append(args, printValue(arg))
+		}
+
+		if instr.Type.Kind == TypeVoid {
+			return fmt.Sprintf("call %s(%s)", instr.Callee, strings.Join(args, ", "))
+		}
+
+		return fmt.Sprintf("%s = call %s(%s)",
+			printTypedValue(instr.Dest, instr.Type),
+			instr.Callee,
+			strings.Join(args, ", "),
+		)
+	case OpParam:
+		return fmt.Sprintf("%s = param %d",
+			printTypedValue(instr.Dest, instr.Type),
+			instr.ParamIndex,
+		)
+	case OpFieldAddr:
+		return fmt.Sprintf("%s = fieldaddr %s, %d",
+			printTypedValue(instr.Dest, instr.Type),
+			printValue(instr.Args[0]),
+			instr.FieldOffset,
+		)
 	case OpPrint:
 		return fmt.Sprintf("print %s", printValue(instr.Args[0]))
 	case OpConst:
@@ -136,6 +162,12 @@ func printType(tp Type) string {
 		return "string"
 	case TypeBool:
 		return "bool"
+	case TypeVoid:
+		return "void"
+	case TypeFloat32:
+		return "f32"
+	case TypeFloat64:
+		return "f64"
 	default:
 		return "<invalid-type>"
 	}
@@ -171,6 +203,12 @@ func opToString(op OpCode) string {
 		return "neg"
 	case OpStringConst:
 		return "string const"
+	case OpCall:
+		return "call"
+	case OpParam:
+		return "param"
+	case OpFieldAddr:
+		return "fieldaddr"
 	default:
 		return fmt.Sprintf("<unknown op %d>", op)
 	}

@@ -1,5 +1,39 @@
 package main
+FuncDecl identity(string text) return=string public=false
+BlockStmt
+  ReturnStmt
+    IdentExpr(text)
+FuncDecl greet() return=string public=false
+BlockStmt
+  ReturnStmt
+    StringLiteralExpr("hello from function")
+FuncDecl half() return=float64 public=false
+BlockStmt
+  ReturnStmt
+    UnknownExpr(*ast.FloatLiteralExpr)
 FuncDecl main() return=void public=false
 BlockStmt
+  VarDeclStmt a string = 
+    StringLiteralExpr("input string")
+  VarDeclStmt b string = 
+    CallExpr identity
+      IdentExpr(a)
+  VarDeclStmt c string = 
+    CallExpr greet
+  VarDeclStmt x float64 = 
+    CallExpr half
   CallStmt print
-    IntLiteralExpr(1)
+    IdentExpr(a)
+  CallStmt print
+    IdentExpr(b)
+  CallStmt print
+    IdentExpr(c)
+  IfStmt
+    Cond:
+      BinaryExpr(==)
+        IdentExpr(x)
+        UnknownExpr(*ast.FloatLiteralExpr)
+    Then:
+    BlockStmt
+      CallStmt print
+        StringLiteralExpr("float ok")

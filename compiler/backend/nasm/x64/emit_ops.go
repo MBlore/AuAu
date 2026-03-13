@@ -210,7 +210,14 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 		fmt.Fprintf(b, "  mov rdx, %s\n", slot(frame, instr.Args[0]))
 		fmt.Fprintf(b, "  call printf\n")
 	case ir.OpAlloc:
-		// No code needed for allocation since we reserved stack space in the prologue.
+		// Materialize the address of the pointee storage into the destination slot.
+		base, ok := frame.allocBases[instr.Dest]
+		if !ok {
+			panic("missing alloc base for allocation")
+		}
+
+		fmt.Fprintf(b, "  lea rax, [rbp-%d]\n", base)
+		fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
 	case ir.OpConst:
 		// Floats are handled differently as they are float bits.
 		if instr.Type.Kind == ir.TypeFloat32 {
@@ -241,54 +248,71 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 
 		// Handle floats.
 		if storeType.Kind == ir.TypeFloat32 {
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
 			fmt.Fprintf(b, "  mov eax, dword %s\n", slot(frame, instr.Args[1]))
-			fmt.Fprintf(b, "  mov dword %s, eax\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov dword [rcx], eax\n")
 			break
 		}
 
 		if storeType.Kind == ir.TypeFloat64 {
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
 			fmt.Fprintf(b, "  mov rax, qword %s\n", slot(frame, instr.Args[1]))
-			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov qword [rcx], rax\n")
 			break
 		}
 
 		// Handle string save (ptr + len).
 		if storeType.Kind == ir.TypeString {
-			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 0))
-			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Args[0], 0))
+			// Load destination pointer.
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
 
+			// Copy string ptr field.
+			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 0))
+			fmt.Fprintf(b, "  mov qword [rcx], rax\n")
+
+			// Copy string len field.
 			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 8))
-			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Args[0], 8))
+			fmt.Fprintf(b, "  mov qword [rcx+8], rax\n")
 			break
 		}
 
+		fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
 		fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[1]))
-		fmt.Fprintf(b, "  mov %s, %s\n", sizedMem(slot(frame, instr.Args[0]), storeType), regForType("rax", storeType))
+		fmt.Fprintf(b, "  mov %s, %s\n", sizedMem("[rcx]", storeType), regForType("rax", storeType))
 	case ir.OpLoad:
 		// Handle floats.
 		if instr.Type.Kind == ir.TypeFloat32 {
-			fmt.Fprintf(b, "  mov eax, dword %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov eax, dword [rcx]\n")
 			fmt.Fprintf(b, "  mov dword %s, eax\n", slot(frame, instr.Dest))
 			break
 		}
 
 		if instr.Type.Kind == ir.TypeFloat64 {
-			fmt.Fprintf(b, "  mov rax, qword %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
+			fmt.Fprintf(b, "  mov rax, qword [rcx]\n")
 			fmt.Fprintf(b, "  mov qword %s, rax\n", slot(frame, instr.Dest))
 			break
 		}
 
 		// Handle strings (ptr + len copy).
 		if instr.Type.Kind == ir.TypeString {
-			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[0], 0))
+			// Load source pointer.
+			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
+
+			// Copy ptr field into destination string temp.
+			fmt.Fprintf(b, "  mov rax, qword [rcx]\n")
 			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0))
-			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[0], 8))
+
+			// Copy len field into destination string temp.
+			fmt.Fprintf(b, "  mov rax, qword [rcx+8]\n")
 			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8))
 			break
 		}
 
 		// Handle ints.
-		emitLoadIntoRAX(b, instr, frame)
+		fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
+		emitLoadIntoRAXFromPtr(b, instr.Type, "rcx")
 		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
 	case ir.OpReturn:
 		// Write the function epilogue and return.
@@ -531,6 +555,30 @@ func emitLoadIntoRAX(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
 		fmt.Fprintf(b, "  movzx eax, byte %s\n", slot(frame, instr.Args[0]))
 	default:
 		panic(fmt.Sprintf("unsupported load type: %d", instr.Type.Kind))
+	}
+}
+
+// emitLoadIntoRAXFromPtr emits the appropriate instructions to load a value from the
+// memory pointed to by ptrReg into RAX based on the IR type being loaded.
+func emitLoadIntoRAXFromPtr(b *bytes.Buffer, t ir.Type, ptrReg string) {
+	switch t.Kind {
+	case ir.TypeI64, ir.TypeU64, ir.TypePtr:
+		fmt.Fprintf(b, "  mov rax, qword [%s]\n", ptrReg)
+	case ir.TypeI32:
+		fmt.Fprintf(b, "  mov eax, dword [%s]\n", ptrReg)
+		fmt.Fprintf(b, "  movsxd rax, eax\n")
+	case ir.TypeU32:
+		fmt.Fprintf(b, "  mov eax, dword [%s]\n", ptrReg)
+	case ir.TypeI16:
+		fmt.Fprintf(b, "  movsx rax, word [%s]\n", ptrReg)
+	case ir.TypeU16:
+		fmt.Fprintf(b, "  movzx eax, word [%s]\n", ptrReg)
+	case ir.TypeI8:
+		fmt.Fprintf(b, "  movsx rax, byte [%s]\n", ptrReg)
+	case ir.TypeU8, ir.TypeBool:
+		fmt.Fprintf(b, "  movzx eax, byte [%s]\n", ptrReg)
+	default:
+		panic(fmt.Sprintf("unsupported load type: %d", t.Kind))
 	}
 }
 

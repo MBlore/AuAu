@@ -14,24 +14,39 @@ func inferConstantTypes(ctx *validateContext) {
 	// From here, we need to walk all the function blocks, all the statements in each block,
 	// and all the expressions and literals in each statement, and infer types for any literals we find.
 	for _, fn := range ctx.file.Functions {
-		inferTypesInBlock(ctx, fn.Body, make(map[string]*ast.TypeRef))
+		scope := make(map[string]*ast.TypeRef, len(fn.Params))
+		for _, param := range fn.Params {
+			scope[param.Name] = param.Type
+		}
+
+		inferTypesInBlock(ctx, fn.Body, scope, fn.ReturnType)
 	}
 }
 
-func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt, scope map[string]*ast.TypeRef) {
+func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt, scope map[string]*ast.TypeRef, returnType *ast.TypeRef) {
 	localScope := cloneTypeScope(scope)
 
 	for _, stmt := range block.Stmts {
-		inferTypesInStmt(ctx, stmt, localScope)
+		inferTypesInStmt(ctx, stmt, localScope, returnType)
 	}
 }
 
 // inferTypesInStmt is used to infer types in statements that aren't blocks, such as else if statements.
-func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast.TypeRef) {
+func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast.TypeRef, returnType *ast.TypeRef) {
 	switch s := stmt.(type) {
 	case *ast.CallStmt:
-		for _, arg := range s.Args {
-			inferExprDefaultType(ctx, scope, arg)
+		call := &ast.CallExpr{
+			NodeMeta: ast.NodeMeta{
+				Line: s.Line,
+				Col:  s.Col,
+			},
+			FuncName: s.FuncName,
+			Args:     s.Args,
+		}
+		validateCallExpr(ctx, scope, call)
+	case *ast.ReturnStmt:
+		if s.ReturnExpr != nil {
+			validateExprType(ctx, scope, returnType, s.ReturnExpr)
 		}
 	case *ast.VarDeclStmt:
 		if s.Init != nil {
@@ -40,29 +55,29 @@ func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast
 		scope[s.Name] = s.Type
 	case *ast.IfStmt:
 		validateExprType(ctx, scope, ast.TypeBoolRef, s.Cond)
-		inferTypesInBlock(ctx, s.Then, scope)
+		inferTypesInBlock(ctx, s.Then, scope, returnType)
 		if s.Else != nil {
-			inferTypesInStmt(ctx, s.Else, cloneTypeScope(scope))
+			inferTypesInStmt(ctx, s.Else, cloneTypeScope(scope), returnType)
 		}
 	case *ast.BlockStmt:
-		inferTypesInBlock(ctx, s, scope)
+		inferTypesInBlock(ctx, s, scope, returnType)
 	case *ast.WhileStmt:
 		validateExprType(ctx, scope, ast.TypeBoolRef, s.Cond)
-		inferTypesInBlock(ctx, s.Body, scope)
+		inferTypesInBlock(ctx, s.Body, scope, returnType)
 	case *ast.ForStmt:
 		loopScope := cloneTypeScope(scope)
 
 		if s.Init != nil {
-			inferTypesInStmt(ctx, s.Init, loopScope)
+			inferTypesInStmt(ctx, s.Init, loopScope, returnType)
 		}
 		if s.Cond != nil {
 			validateExprType(ctx, loopScope, ast.TypeBoolRef, s.Cond)
 		}
 		if s.Body != nil {
-			inferTypesInBlock(ctx, s.Body, loopScope)
+			inferTypesInBlock(ctx, s.Body, loopScope, returnType)
 		}
 		if s.Post != nil {
-			inferTypesInStmt(ctx, s.Post, loopScope)
+			inferTypesInStmt(ctx, s.Post, loopScope, returnType)
 		}
 	}
 }
@@ -75,9 +90,13 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 	// Now we look for IntLiteralExpr in the expression graph and set their type to the inferred type.
 	switch e := expr.(type) {
 	case *ast.CallExpr:
-		e.InferredType = expectedType
-		for _, arg := range e.Args {
-			inferExprDefaultType(ctx, scope, arg)
+		retType := validateCallExpr(ctx, scope, e)
+		if retType == nil {
+			return
+		}
+
+		if retType.Kind != expectedType.Kind {
+			ctx.addError(e.NodeMeta, "type mismatch: expected "+ast.TypeKindToString(expectedType.Kind)+", got "+ast.TypeKindToString(retType.Kind))
 		}
 	case *ast.StringLiteralExpr:
 		if expectedType.Kind != ast.TypeString {
@@ -169,7 +188,7 @@ func validateExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expec
 		}
 	case *ast.IdentExpr:
 		// Types must match the declared type of the variable.
-		declType, ok := scope[e.Name]
+		declType, ok := lookupType(scope, ctx, e.Name)
 		if !ok {
 			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
 			return
@@ -346,7 +365,7 @@ func isFloatType(t *ast.TypeRef) bool {
 func inferExprDefaultType(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) {
 	switch e := expr.(type) {
 	case *ast.CallExpr:
-		e.InferredType = ast.TypeIntRef
+		validateCallExpr(ctx, scope, e)
 	case *ast.StringLiteralExpr:
 		validateExprType(ctx, scope, ast.TypeStringRef, e)
 	case *ast.BoolLiteralExpr:
