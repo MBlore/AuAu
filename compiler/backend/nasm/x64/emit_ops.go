@@ -197,13 +197,22 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 	case ir.OpStringConst:
 		label := stringLabels[instr]
 
+		if !instr.Type.IsString() {
+			panic("OpStringConst must produce string type")
+		}
+
+		dataOffset := 0
+		lenOffset := stackSize(instr.Type.Fields[0].Type)
+
+		// Store the string data pointer and length in the destination slot as a struct.
 		fmt.Fprintf(b, "  ; String constant: %s\n", label)
 		fmt.Fprintf(b, "  mov rax, %s\n", label)
-		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0)) // ptr
+		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, dataOffset))
 
 		fmt.Fprintf(b, "  mov rax, %d\n", len(instr.Data))
-		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8)) // len
+		fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, lenOffset))
 		fmt.Fprintf(b, "  ; End string constant: %s\n", label)
+
 	case ir.OpPrint:
 		// Call printf with the value in RAX.
 		fmt.Fprintf(b, "  mov rcx, fmt_int\n")
@@ -261,18 +270,10 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 			break
 		}
 
-		// Handle string save (ptr + len).
-		if storeType.Kind == ir.TypeString {
-			// Load destination pointer.
+		// Handle structs.
+		if storeType.IsStruct() {
 			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
-
-			// Copy string ptr field.
-			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 0))
-			fmt.Fprintf(b, "  mov qword [rcx], rax\n")
-
-			// Copy string len field.
-			fmt.Fprintf(b, "  mov rax, %s\n", slotField(frame, instr.Args[1], 8))
-			fmt.Fprintf(b, "  mov qword [rcx+8], rax\n")
+			emitAggregateCopyToPtr(b, storeType, 0, instr.Args[1], 0, frame)
 			break
 		}
 
@@ -295,18 +296,10 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 			break
 		}
 
-		// Handle strings (ptr + len copy).
-		if instr.Type.Kind == ir.TypeString {
-			// Load source pointer.
+		// Handle structs.
+		if instr.Type.IsStruct() {
 			fmt.Fprintf(b, "  mov rcx, qword %s\n", slot(frame, instr.Args[0]))
-
-			// Copy ptr field into destination string temp.
-			fmt.Fprintf(b, "  mov rax, qword [rcx]\n")
-			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 0))
-
-			// Copy len field into destination string temp.
-			fmt.Fprintf(b, "  mov rax, qword [rcx+8]\n")
-			fmt.Fprintf(b, "  mov %s, rax\n", slotField(frame, instr.Dest, 8))
+			emitAggregateLoadFromPtr(b, instr.Type, instr.Dest, 0, 0, frame)
 			break
 		}
 
@@ -320,13 +313,15 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 		if len(instr.Args) > 0 {
 			retType := valueType(frame, instr.Args[0])
 
-			switch retType.Kind {
-			case ir.TypeFloat32:
-				fmt.Fprintf(b, "  movss xmm0, dword %s\n", slot(frame, instr.Args[0]))
-			case ir.TypeFloat64:
-				fmt.Fprintf(b, "  movsd xmm0, qword %s\n", slot(frame, instr.Args[0]))
-			default:
-				fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+			if !ir.ReturnsViaHiddenPtr(retType) {
+				switch retType.Kind {
+				case ir.TypeFloat32:
+					fmt.Fprintf(b, "  movss xmm0, dword %s\n", slot(frame, instr.Args[0]))
+				case ir.TypeFloat64:
+					fmt.Fprintf(b, "  movsd xmm0, qword %s\n", slot(frame, instr.Args[0]))
+				default:
+					fmt.Fprintf(b, "  mov rax, %s\n", slot(frame, instr.Args[0]))
+				}
 			}
 		}
 
@@ -596,4 +591,93 @@ func incomingStackArgOffset(paramIndex int) int {
 	//
 	// the first stack-passed argument is at [rbp+16].
 	return 16 + ((paramIndex - 4) * 8)
+}
+
+// emitAggregateCopyToPtr recursively copies the fields of an aggregate value from a source slot to a
+// destination pointer with the appropriate offsets.
+func emitAggregateCopyToPtr(b *bytes.Buffer, t ir.Type, baseOffset int, srcValue ir.IRValue, srcOffset int, frame *stackFrame) {
+	if !t.IsStruct() {
+		src := slotField(frame, srcValue, srcOffset)
+
+		switch t.Kind {
+		case ir.TypeFloat32:
+			fmt.Fprintf(b, "  mov eax, dword %s\n", src)
+			fmt.Fprintf(b, "  mov dword [rcx+%d], eax\n", baseOffset)
+		case ir.TypeFloat64:
+			fmt.Fprintf(b, "  mov rax, qword %s\n", src)
+			fmt.Fprintf(b, "  mov qword [rcx+%d], rax\n", baseOffset)
+		default:
+			fmt.Fprintf(b, "  mov rax, %s\n", src)
+			fmt.Fprintf(b, "  mov %s, %s\n", sizedMem(fmt.Sprintf("[rcx+%d]", baseOffset), t), regForType("rax", t))
+		}
+		return
+	}
+
+	offset := 0
+	for _, field := range t.Fields {
+		emitAggregateCopyToPtr(b, field.Type, baseOffset+offset, srcValue, srcOffset+offset, frame)
+		offset += stackSize(field.Type)
+	}
+}
+
+// emitAggregateLoadFromPtr recursively loads the fields of an aggregate value from a source pointer
+// into a destination slot with the appropriate offsets.
+func emitAggregateLoadFromPtr(b *bytes.Buffer, t ir.Type, dstValue ir.IRValue, dstOffset int, baseOffset int, frame *stackFrame) {
+	if !t.IsStruct() {
+		dst := slotField(frame, dstValue, dstOffset)
+
+		switch t.Kind {
+		case ir.TypeFloat32:
+			if baseOffset == 0 {
+				fmt.Fprintf(b, "  mov eax, dword [rcx]\n")
+			} else {
+				fmt.Fprintf(b, "  mov eax, dword [rcx+%d]\n", baseOffset)
+			}
+			fmt.Fprintf(b, "  mov dword %s, eax\n", dst)
+
+		case ir.TypeFloat64:
+			if baseOffset == 0 {
+				fmt.Fprintf(b, "  mov rax, qword [rcx]\n")
+			} else {
+				fmt.Fprintf(b, "  mov rax, qword [rcx+%d]\n", baseOffset)
+			}
+			fmt.Fprintf(b, "  mov qword %s, rax\n", dst)
+
+		default:
+			// For non-float scalars, we need to load into RAX first and then move to the destination slot with proper size handling.
+			mem := "[rcx]"
+			if baseOffset != 0 {
+				mem = fmt.Sprintf("[rcx+%d]", baseOffset)
+			}
+
+			switch t.Kind {
+			case ir.TypeI64, ir.TypeU64, ir.TypePtr:
+				fmt.Fprintf(b, "  mov rax, qword %s\n", mem)
+			case ir.TypeI32:
+				fmt.Fprintf(b, "  mov eax, dword %s\n", mem)
+				fmt.Fprintf(b, "  movsxd rax, eax\n")
+			case ir.TypeU32:
+				fmt.Fprintf(b, "  mov eax, dword %s\n", mem)
+			case ir.TypeI16:
+				fmt.Fprintf(b, "  movsx rax, word %s\n", mem)
+			case ir.TypeU16:
+				fmt.Fprintf(b, "  movzx eax, word %s\n", mem)
+			case ir.TypeI8:
+				fmt.Fprintf(b, "  movsx rax, byte %s\n", mem)
+			case ir.TypeU8, ir.TypeBool:
+				fmt.Fprintf(b, "  movzx eax, byte %s\n", mem)
+			default:
+				panic(fmt.Sprintf("unsupported aggregate load type: %d", t.Kind))
+			}
+
+			fmt.Fprintf(b, "  mov %s, rax\n", dst)
+		}
+		return
+	}
+
+	offset := 0
+	for _, field := range t.Fields {
+		emitAggregateLoadFromPtr(b, field.Type, dstValue, dstOffset+offset, baseOffset+offset, frame)
+		offset += stackSize(field.Type)
+	}
 }

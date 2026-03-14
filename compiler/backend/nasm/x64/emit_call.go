@@ -224,66 +224,71 @@ func emitLoadCallIntArg(b *bytes.Buffer, reg string, arg callArg) {
 
 // emitCallReturn emits the assembly code to move the return value of a call instruction into the appropriate destination based on the return type.
 func emitCallReturn(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame) {
-	switch instr.Type.Kind {
-	case ir.TypeVoid, ir.TypeString:
-		// No need to move anything for void returns.
-		// For strings, the caller will read the return value from the hidden pointer argument, so we don't need to move anything here either.
+	if instr.Type.Kind == ir.TypeVoid || ir.ReturnsViaHiddenPtr(instr.Type) {
 		return
+	}
 
+	switch instr.Type.Kind {
 	case ir.TypeFloat32:
 		fmt.Fprintf(b, "  movss dword %s, xmm0\n", slot(frame, instr.Dest))
-
 	case ir.TypeFloat64:
 		fmt.Fprintf(b, "  movsd qword %s, xmm0\n", slot(frame, instr.Dest))
-
 	default:
 		fmt.Fprintf(b, "  mov %s, rax\n", slot(frame, instr.Dest))
 	}
 }
 
-// flattenCallArgs takes the arguments for a call instruction and flattens them into a list of callArg structs that represent how each argument should be passed (in registers or on the stack).
-// This helps with complex types like strings that require multiple registers or stack slots to pass.
+// flattenCallArgs takes a call instruction and flattens its arguments into a slice of callArg
+// structs that describe how to pass each argument according to the x64 calling convention.
 func flattenCallArgs(instr *ir.Instr, frame *stackFrame) []callArg {
 	args := make([]callArg, 0, len(instr.Args))
 
-	// If the return type is not a simple scalar value,
-	// we need to pass a hidden pointer for the return value as the first argument.
-	if returnsViaHiddenPtr(instr.Type) {
+	// If the function returns a struct via a hidden pointer, we need to pass that pointer
+	// as the first argument.
+	if ir.ReturnsViaHiddenPtr(instr.Type) {
 		args = append(args, callArg{
-			typ:       ir.Type{Kind: ir.TypePtr, Elem: &instr.Type},
+			typ:       ir.PtrType(instr.Type),
 			slot:      slot(frame, instr.Dest),
 			memSize:   "qword",
 			isAddress: true,
 		})
 	}
 
+	// Now flatten the regular arguments.
 	for _, arg := range instr.Args {
 		t := valueType(frame, arg)
+		args = append(args, flattenCallValue(frame, arg, t, 0, false)...)
+	}
 
-		switch t.Kind {
-		case ir.TypeString:
-			// For strings, we need to pass both the pointer and the length.
-			args = append(args,
-				callArg{
-					typ:     ir.Type{Kind: ir.TypePtr},
-					slot:    slotField(frame, arg, 0),
-					memSize: "qword",
-				},
-				callArg{
-					typ:     ir.Type{Kind: ir.TypeI64},
-					slot:    slotField(frame, arg, 8),
-					memSize: "qword",
-				},
-			)
+	return args
+}
 
-		default:
-			// For simple types, we can pass them directly.
-			args = append(args, callArg{
-				typ:     t,
-				slot:    slot(frame, arg),
-				memSize: memPrefix(t),
-			})
+// flattenCallValue takes an IRValue that is being passed as an argument to a call instruction,
+// and flattens it into one or more callArg structs that describe how to pass the value according
+// to the x64 calling convention. This includes handling struct values by flattening their fields
+// into separate arguments.
+func flattenCallValue(frame *stackFrame, value ir.IRValue, t ir.Type, fieldOffset int, isField bool) []callArg {
+	if t.Kind != ir.TypeStruct {
+		// For non-struct types, we can pass the value directly.
+		slotRef := slot(frame, value)
+		if isField {
+			slotRef = slotField(frame, value, fieldOffset)
 		}
+
+		return []callArg{{
+			typ:     t,
+			slot:    slotRef,
+			memSize: memPrefix(t),
+		}}
+	}
+
+	// For struct types, we need to flatten each field into a separate argument.
+	args := []callArg{}
+	offset := fieldOffset
+
+	for _, field := range t.Fields {
+		args = append(args, flattenCallValue(frame, value, field.Type, offset, true)...)
+		offset += stackSize(field.Type)
 	}
 
 	return args
@@ -331,15 +336,5 @@ func callIntArgReg(index int) string {
 		return "r9"
 	default:
 		panic(fmt.Sprintf("unsupported integer argument register index: %d", index))
-	}
-}
-
-func returnsViaHiddenPtr(t ir.Type) bool {
-	// Later, custom structs and other complex types may return via hidden pointers too.
-	switch t.Kind {
-	case ir.TypeString:
-		return true
-	default:
-		return false
 	}
 }

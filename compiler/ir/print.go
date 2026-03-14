@@ -136,6 +136,23 @@ func printTypedValue(v IRValue, tp Type) string {
 }
 
 func printType(tp Type) string {
+	if tp.IsString() {
+		return "string"
+	}
+
+	if tp.IsStruct() {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "struct %s {", tp.Name)
+		for i, field := range tp.Fields {
+			if i > 0 {
+				fmt.Fprintf(&sb, ", ")
+			}
+			fmt.Fprintf(&sb, "%s: %s", field.Name, printType(field.Type))
+		}
+		fmt.Fprintf(&sb, "}")
+		return sb.String()
+	}
+
 	switch tp.Kind {
 	case TypeI8:
 		return "i8"
@@ -158,8 +175,6 @@ func printType(tp Type) string {
 			return "ptr<?>"
 		}
 		return fmt.Sprintf("ptr<%s>", printType(*tp.Elem))
-	case TypeString:
-		return "string"
 	case TypeBool:
 		return "bool"
 	case TypeVoid:

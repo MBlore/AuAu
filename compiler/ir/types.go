@@ -12,16 +12,25 @@ const (
 	TypeU32
 	TypeU64
 	TypePtr
-	TypeString
 	TypeBool
 	TypeVoid
 	TypeFloat32
 	TypeFloat64
+	TypeStruct
+	TypeArray
 )
 
 type Type struct {
-	Kind TypeKind
-	Elem *Type
+	Kind   TypeKind
+	Elem   *Type
+	Len    int     // For arrays, the number of elements.
+	Fields []Field // For structs, the fields of the struct.
+	Name   string  // For named types, the name of the type.
+}
+
+type Field struct {
+	Name string
+	Type Type
 }
 
 type CmpKind int
@@ -125,4 +134,40 @@ type Builder struct {
 	nextVal IRValue
 	// Block numbering counter.
 	nextBlockID int
+}
+
+// PtrType creates a pointer type for the given element type.
+func PtrType(elem Type) Type {
+	return Type{
+		Kind: TypePtr,
+		Elem: &elem,
+	}
+}
+
+// StringType returns the IR type representing a string.
+func StringType() Type {
+	return Type{
+		Kind: TypeStruct,
+		Name: "string",
+		Fields: []Field{
+			{Name: "data", Type: Type{Kind: TypePtr, Elem: &Type{Kind: TypeU8}}},
+			{Name: "len", Type: Type{Kind: TypeI64}},
+		},
+	}
+}
+
+func (t Type) IsString() bool {
+	return t.Kind == TypeStruct && t.Name == "string"
+}
+
+func (t Type) IsPtr() bool {
+	return t.Kind == TypePtr
+}
+
+func (t Type) IsStruct() bool {
+	return t.Kind == TypeStruct
+}
+
+func ReturnsViaHiddenPtr(t Type) bool {
+	return t.IsStruct()
 }

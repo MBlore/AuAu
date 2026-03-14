@@ -110,7 +110,7 @@ func (b *Builder) StringConst(data []byte) IRValue {
 	instr := &Instr{
 		Op:   OpStringConst,
 		Dest: dest,
-		Type: Type{Kind: TypeString},
+		Type: StringType(),
 		Data: append([]byte(nil), data...), // make a copy of the data
 	}
 
@@ -162,14 +162,6 @@ func (b *Builder) Return(vals ...IRValue) {
 	}
 
 	b.current.Instrs = append(b.current.Instrs, instr)
-}
-
-// PtrType creates a pointer type for the given element type.
-func PtrType(elem Type) Type {
-	return Type{
-		Kind: TypePtr,
-		Elem: &elem,
-	}
 }
 
 // Alloc creates a new allocation instruction and returns the address of the allocated memory.

@@ -156,8 +156,10 @@ func buildFunction(fn *ast.FuncDecl, funcs map[string]fnSig) (*Function, error) 
 func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
 	abiParams := flattenFunctionABIParams(fn)
 	abiIndex := 0
+	retType := irTypeFromAstType(fn.ReturnType)
 
-	if irTypeFromAstType(fn.ReturnType).Kind == TypeString {
+	// Use sret pointer for struct returns.
+	if ReturnsViaHiddenPtr(retType) {
 		retPtrVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
 		l.returnAddr = retPtrVal
 		l.hasReturnAddr = true
@@ -166,57 +168,51 @@ func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
 
 	for _, param := range fn.Params {
 		paramType := irTypeFromAstType(param.Type)
+		addr := l.builder.Alloc(paramType)
 
-		switch paramType.Kind {
-		case TypeString:
-			// For strings, we have a hidden sret pointer for the return value, and for
-			// parameters we pass the pointer and length as separate parameters.
-			ptrVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
-			abiIndex++
-
-			lenVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
-			abiIndex++
-
-			// Create an alloc for the string parameter and store the pointer and length to it.
-			addr := l.builder.Alloc(paramType)
-
-			// Remember the variable name and its address.
-			if _, exists := l.currentScope()[param.Name]; exists {
-				panic(fmt.Sprintf("parameter %s already declared", param.Name))
-			}
-
-			l.currentScope()[param.Name] = varInfo{
-				addr: addr,
-				typ:  paramType,
-			}
-
-			// The pointer is at offset 0 and the length is at offset 8 in the allocated struct.
-			ptrAddr := l.builder.FieldAddr(addr, 0, Type{Kind: TypePtr})
-			lenAddr := l.builder.FieldAddr(addr, 8, Type{Kind: TypeI64})
-
-			// Store the pointer and length to the parameter's address.
-			l.builder.Store(ptrAddr, ptrVal)
-			l.builder.Store(lenAddr, lenVal)
-		default:
-			paramVal := l.builder.Param(paramType, abiIndex)
-			abiIndex++
-
-			addr := l.builder.Alloc(paramType)
-
-			if _, exists := l.currentScope()[param.Name]; exists {
-				panic(fmt.Sprintf("parameter %s already declared", param.Name))
-			}
-
-			l.currentScope()[param.Name] = varInfo{
-				addr: addr,
-				typ:  paramType,
-			}
-
-			l.builder.Store(addr, paramVal)
+		// Check and remember the parameter in the current scope.
+		if _, exists := l.currentScope()[param.Name]; exists {
+			panic(fmt.Sprintf("parameter %s already declared", param.Name))
 		}
+
+		l.currentScope()[param.Name] = varInfo{
+			addr: addr,
+			typ:  paramType,
+		}
+
+		// Single parameter case, just bind it directly.
+		if len(flattenABIType(paramType)) == 1 {
+			paramVal := l.builder.Param(abiParams[abiIndex].typ, abiIndex)
+			abiIndex++
+			l.builder.Store(addr, paramVal)
+			continue
+		}
+
+		// For flattened types, we need to bind each field separately.
+		l.bindAggregateParam(addr, paramType, abiParams, &abiIndex)
 	}
 
 	return nil
+}
+
+// bindAggregateParam binds a struct parameter by recursively binding each field.
+func (l *Lowerer) bindAggregateParam(addr IRValue, t Type, abiParams []abiParam, abiIndex *int) {
+	if !t.IsStruct() {
+		// Single parameter case, just bind it directly.
+		paramVal := l.builder.Param(abiParams[*abiIndex].typ, *abiIndex)
+
+		*abiIndex = *abiIndex + 1
+
+		l.builder.Store(addr, paramVal)
+		return
+	}
+
+	// Multiple parameter case, we need to bind each field separately
+	// and store them to the correct offset in the struct.
+	for i, field := range t.Fields {
+		fieldAddr := l.builder.FieldAddr(addr, fieldOffset(t, i), field.Type)
+		l.bindAggregateParam(fieldAddr, field.Type, abiParams, abiIndex)
+	}
 }
 
 // buildStackFrame constructs a stack frame for the given function by looking for all instructions
@@ -225,9 +221,10 @@ func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
 func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
 	params := make([]abiParam, 0, len(fn.Params)+1)
 
-	// Hidden sret pointer for aggregate-like returns.
-	if irTypeFromAstType(fn.ReturnType).Kind == TypeString {
-		retType := irTypeFromAstType(fn.ReturnType)
+	retType := irTypeFromAstType(fn.ReturnType)
+
+	// Hidden sret pointer for struct returns.
+	if ReturnsViaHiddenPtr(retType) {
 		params = append(params, abiParam{
 			name: "__ret_ptr",
 			typ:  PtrType(retType),
@@ -236,24 +233,23 @@ func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
 
 	for _, param := range fn.Params {
 		t := irTypeFromAstType(param.Type)
+		flat := flattenABIType(t)
 
-		switch t.Kind {
-		case TypeString:
-			params = append(params,
-				abiParam{
-					name: param.Name + ".__ptr",
-					typ:  Type{Kind: TypePtr},
-				},
-				abiParam{
-					name: param.Name + ".__len",
-					typ:  Type{Kind: TypeI64},
-				},
-			)
-
-		default:
+		// If the type doesn't flatten to multiple types, we can just pass it as a single parameter.
+		if len(flat) == 1 {
 			params = append(params, abiParam{
 				name: param.Name,
-				typ:  t,
+				typ:  flat[0],
+			})
+
+			continue
+		}
+
+		// For flattened types, we need to pass each flattened field as a separate parameter.
+		for i, fieldType := range flat {
+			params = append(params, abiParam{
+				name: fmt.Sprintf("%s.__%d", param.Name, i),
+				typ:  fieldType,
 			})
 		}
 	}
@@ -699,7 +695,7 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 	case ast.TypeUInt64:
 		return Type{Kind: TypeU64}
 	case ast.TypeString:
-		return Type{Kind: TypeString}
+		return StringType()
 	case ast.TypeBool:
 		return Type{Kind: TypeBool}
 	case ast.TypeByte:
@@ -747,4 +743,49 @@ func blockTerminated(block *Block) bool {
 
 	lastOp := block.Instrs[len(block.Instrs)-1].Op
 	return lastOp == OpReturn || lastOp == OpBranch || lastOp == OpJump
+}
+
+// flattenABIType takes a Type and if it's a struct, it recursively flattens its fields into a slice of Types.
+func flattenABIType(t Type) []Type {
+	if !t.IsStruct() {
+		return []Type{t}
+	}
+
+	var types []Type
+	for _, field := range t.Fields {
+		types = append(types, flattenABIType(field.Type)...)
+	}
+
+	return types
+}
+
+func abiSize(t Type) int {
+	if !t.IsStruct() {
+		// All non-struct types are 8 bytes in size in our ABI for simplicity.
+		// Later we can optimize this using smaller sizes for certain types if we want.
+		return 8
+	}
+
+	size := 0
+
+	for _, field := range t.Fields {
+		size += abiSize(field.Type)
+	}
+
+	return size
+}
+
+// fieldOffset calculates the byte offset of a field within a struct type, accounting for nested structs.
+func fieldOffset(t Type, fieldIndex int) int {
+	if !t.IsStruct() {
+		panic("fieldOffset called on non-struct type")
+	}
+
+	offset := 0
+
+	for i := 0; i < fieldIndex; i++ {
+		offset += abiSize(t.Fields[i].Type)
+	}
+
+	return offset
 }
