@@ -172,25 +172,80 @@ func ReturnsViaHiddenPtr(t Type) bool {
 	return t.IsStruct()
 }
 
-// TypeSize returns the storage size of a type under the compiler's current
-// simple aggregate layout model.
-func TypeSize(t Type) int {
+func alignUp(offset int, align int) int {
+	if align <= 0 {
+		panic("alignment must be positive")
+	}
+
+	rem := offset % align
+	if rem == 0 {
+		return offset
+	}
+
+	return offset + (align - rem)
+}
+
+// TypeAlign returns the storage alignment of a type under the compiler's
+// shared aggregate layout model.
+func TypeAlign(t Type) int {
 	switch t.Kind {
-	case TypeStruct:
-		size := 0
-		for _, field := range t.Fields {
-			size += TypeSize(field.Type)
-		}
-		return size
+	case TypeI8, TypeU8, TypeBool:
+		return 1
+	case TypeI16, TypeU16:
+		return 2
+	case TypeI32, TypeU32, TypeFloat32:
+		return 4
+	case TypeI64, TypeU64, TypePtr, TypeFloat64:
+		return 8
 	case TypeArray:
 		if t.Elem == nil {
 			panic("array type missing element type")
 		}
-		return t.Len * TypeSize(*t.Elem)
-	case TypeI8, TypeI16, TypeI32, TypeI64,
-		TypeU8, TypeU16, TypeU32, TypeU64,
-		TypePtr, TypeBool, TypeFloat32, TypeFloat64:
+		return TypeAlign(*t.Elem)
+	case TypeStruct:
+		if len(t.Fields) == 0 {
+			return 1
+		}
+
+		align := 1
+		for _, field := range t.Fields {
+			fieldAlign := TypeAlign(field.Type)
+			if fieldAlign > align {
+				align = fieldAlign
+			}
+		}
+		return align
+	default:
+		panic("unsupported type kind")
+	}
+}
+
+// TypeSize returns the storage size of a type under the compiler's shared
+// aggregate layout model.
+func TypeSize(t Type) int {
+	switch t.Kind {
+	case TypeI8, TypeU8, TypeBool:
+		return 1
+	case TypeI16, TypeU16:
+		return 2
+	case TypeI32, TypeU32, TypeFloat32:
+		return 4
+	case TypeI64, TypeU64, TypePtr, TypeFloat64:
 		return 8
+	case TypeStruct:
+		offset := 0
+		for _, field := range t.Fields {
+			offset = alignUp(offset, TypeAlign(field.Type))
+			offset += TypeSize(field.Type)
+		}
+		return alignUp(offset, TypeAlign(t))
+	case TypeArray:
+		if t.Elem == nil {
+			panic("array type missing element type")
+		}
+		elem := *t.Elem
+		stride := alignUp(TypeSize(elem), TypeAlign(elem))
+		return t.Len * stride
 	default:
 		panic("unsupported type kind")
 	}
@@ -208,8 +263,10 @@ func FieldOffset(t Type, fieldIndex int) int {
 
 	offset := 0
 	for i := 0; i < fieldIndex; i++ {
-		offset += TypeSize(t.Fields[i].Type)
+		field := t.Fields[i].Type
+		offset = alignUp(offset, TypeAlign(field))
+		offset += TypeSize(field)
 	}
 
-	return offset
+	return alignUp(offset, TypeAlign(t.Fields[fieldIndex].Type))
 }

@@ -65,7 +65,17 @@ func buildStackFrame(fn *ir.Function) *stackFrame {
 
 // stackSize returns the size in bytes of the given IR type when stored on the stack.
 func stackSize(t ir.Type) int {
-	return ir.TypeSize(t)
+	switch t.Kind {
+	case ir.TypeStruct, ir.TypeArray:
+		return ir.TypeSize(t)
+	case ir.TypeI8, ir.TypeI16, ir.TypeI32, ir.TypeI64,
+		ir.TypeU8, ir.TypeU16, ir.TypeU32, ir.TypeU64,
+		ir.TypePtr, ir.TypeBool, ir.TypeFloat32, ir.TypeFloat64:
+		// Scalar SSA temporaries are often written as widened register values.
+		return 8
+	default:
+		panic("unsupported type kind")
+	}
 }
 
 // opCodeProducesValue returns true if the given OpCode produces a value that needs
