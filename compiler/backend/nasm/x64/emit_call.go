@@ -284,11 +284,10 @@ func flattenCallValue(frame *stackFrame, value ir.IRValue, t ir.Type, fieldOffse
 
 	// For struct types, we need to flatten each field into a separate argument.
 	args := []callArg{}
-	offset := fieldOffset
 
-	for _, field := range t.Fields {
+	for i, field := range t.Fields {
+		offset := fieldOffset + ir.FieldOffset(t, i)
 		args = append(args, flattenCallValue(frame, value, field.Type, offset, true)...)
-		offset += stackSize(field.Type)
 	}
 
 	return args

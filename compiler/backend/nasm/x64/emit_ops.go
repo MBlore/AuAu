@@ -201,8 +201,8 @@ func emitOpCode(b *bytes.Buffer, instr *ir.Instr, frame *stackFrame, stringLabel
 			panic("OpStringConst must produce string type")
 		}
 
-		dataOffset := 0
-		lenOffset := stackSize(instr.Type.Fields[0].Type)
+		dataOffset := ir.FieldOffset(instr.Type, 0)
+		lenOffset := ir.FieldOffset(instr.Type, 1)
 
 		// Store the string data pointer and length in the destination slot as a struct.
 		fmt.Fprintf(b, "  ; String constant: %s\n", label)
@@ -613,10 +613,9 @@ func emitAggregateCopyToPtr(b *bytes.Buffer, t ir.Type, baseOffset int, srcValue
 		return
 	}
 
-	offset := 0
-	for _, field := range t.Fields {
-		emitAggregateCopyToPtr(b, field.Type, baseOffset+offset, srcValue, srcOffset+offset, frame)
-		offset += stackSize(field.Type)
+	for i, field := range t.Fields {
+		fieldOffset := ir.FieldOffset(t, i)
+		emitAggregateCopyToPtr(b, field.Type, baseOffset+fieldOffset, srcValue, srcOffset+fieldOffset, frame)
 	}
 }
 
@@ -675,9 +674,8 @@ func emitAggregateLoadFromPtr(b *bytes.Buffer, t ir.Type, dstValue ir.IRValue, d
 		return
 	}
 
-	offset := 0
-	for _, field := range t.Fields {
-		emitAggregateLoadFromPtr(b, field.Type, dstValue, dstOffset+offset, baseOffset+offset, frame)
-		offset += stackSize(field.Type)
+	for i, field := range t.Fields {
+		fieldOffset := ir.FieldOffset(t, i)
+		emitAggregateLoadFromPtr(b, field.Type, dstValue, dstOffset+fieldOffset, baseOffset+fieldOffset, frame)
 	}
 }

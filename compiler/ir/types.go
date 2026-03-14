@@ -171,3 +171,45 @@ func (t Type) IsStruct() bool {
 func ReturnsViaHiddenPtr(t Type) bool {
 	return t.IsStruct()
 }
+
+// TypeSize returns the storage size of a type under the compiler's current
+// simple aggregate layout model.
+func TypeSize(t Type) int {
+	switch t.Kind {
+	case TypeStruct:
+		size := 0
+		for _, field := range t.Fields {
+			size += TypeSize(field.Type)
+		}
+		return size
+	case TypeArray:
+		if t.Elem == nil {
+			panic("array type missing element type")
+		}
+		return t.Len * TypeSize(*t.Elem)
+	case TypeI8, TypeI16, TypeI32, TypeI64,
+		TypeU8, TypeU16, TypeU32, TypeU64,
+		TypePtr, TypeBool, TypeFloat32, TypeFloat64:
+		return 8
+	default:
+		panic("unsupported type kind")
+	}
+}
+
+// FieldOffset returns the byte offset of a direct field within a struct type.
+func FieldOffset(t Type, fieldIndex int) int {
+	if !t.IsStruct() {
+		panic("FieldOffset called on non-struct type")
+	}
+
+	if fieldIndex < 0 || fieldIndex >= len(t.Fields) {
+		panic("field index out of bounds")
+	}
+
+	offset := 0
+	for i := 0; i < fieldIndex; i++ {
+		offset += TypeSize(t.Fields[i].Type)
+	}
+
+	return offset
+}

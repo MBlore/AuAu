@@ -210,7 +210,7 @@ func (l *Lowerer) bindAggregateParam(addr IRValue, t Type, abiParams []abiParam,
 	// Multiple parameter case, we need to bind each field separately
 	// and store them to the correct offset in the struct.
 	for i, field := range t.Fields {
-		fieldAddr := l.builder.FieldAddr(addr, fieldOffset(t, i), field.Type)
+		fieldAddr := l.builder.FieldAddr(addr, FieldOffset(t, i), field.Type)
 		l.bindAggregateParam(fieldAddr, field.Type, abiParams, abiIndex)
 	}
 }
@@ -759,33 +759,3 @@ func flattenABIType(t Type) []Type {
 	return types
 }
 
-func abiSize(t Type) int {
-	if !t.IsStruct() {
-		// All non-struct types are 8 bytes in size in our ABI for simplicity.
-		// Later we can optimize this using smaller sizes for certain types if we want.
-		return 8
-	}
-
-	size := 0
-
-	for _, field := range t.Fields {
-		size += abiSize(field.Type)
-	}
-
-	return size
-}
-
-// fieldOffset calculates the byte offset of a field within a struct type, accounting for nested structs.
-func fieldOffset(t Type, fieldIndex int) int {
-	if !t.IsStruct() {
-		panic("fieldOffset called on non-struct type")
-	}
-
-	offset := 0
-
-	for i := 0; i < fieldIndex; i++ {
-		offset += abiSize(t.Fields[i].Type)
-	}
-
-	return offset
-}

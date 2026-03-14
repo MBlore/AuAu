@@ -65,31 +65,7 @@ func buildStackFrame(fn *ir.Function) *stackFrame {
 
 // stackSize returns the size in bytes of the given IR type when stored on the stack.
 func stackSize(t ir.Type) int {
-	switch t.Kind {
-	case ir.TypeStruct:
-		size := 0
-
-		for _, field := range t.Fields {
-			size += stackSize(field.Type)
-		}
-
-		return size
-
-	case ir.TypeArray:
-		if t.Elem == nil {
-			panic("array type missing element type")
-		}
-
-		return t.Len * stackSize(*t.Elem)
-
-	case ir.TypeI8, ir.TypeI16, ir.TypeI32, ir.TypeI64,
-		ir.TypeU8, ir.TypeU16, ir.TypeU32, ir.TypeU64,
-		ir.TypePtr, ir.TypeBool, ir.TypeFloat32, ir.TypeFloat64:
-		return 8
-
-	default:
-		panic("unsupported type kind")
-	}
+	return ir.TypeSize(t)
 }
 
 // opCodeProducesValue returns true if the given OpCode produces a value that needs
