@@ -16,3 +16,13 @@ BlockStmt
             IdentExpr(a)
     Value:
     IntLiteralExpr(42)
+  CallStmt print
+    CallExpr test
+      FieldAccessExpr(.c)
+        FieldAccessExpr(.b)
+          IdentExpr(a)
+FuncDecl test(C a) return=int public=false
+BlockStmt
+  ReturnStmt
+    FieldAccessExpr(.value)
+      IdentExpr(a)

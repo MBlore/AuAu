@@ -1,19 +1,23 @@
 package main
 
-	struct C {
-		value int
-	}
+struct C {
+	value int
+}
 
-	struct B {
-		c C
-	}
+struct B {
+	c C
+}
 
-	struct A {
-		b B
-	}
+struct A {
+	b B
+}
 
-	void main() {
-		A a
-		a.b.c.value = 42
-		//print(a.b.c.value)
-	}
+void main() {
+	A a
+	a.b.c.value = 42
+	print(test(a.b.c))
+}
+
+int test(C a) {
+	return a.value
+}

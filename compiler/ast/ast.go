@@ -270,7 +270,10 @@ func (*StructDecl) isStmt() {}
 
 type FieldAccessExpr struct {
 	NodeMeta
-	Base  Expr
+
+	// Base is the expression representing the struct instance. For example, in `a.b.c`, `a.b` is the base for the field `c`.
+	Base Expr
+
 	Field string
 }
 

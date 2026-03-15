@@ -28,8 +28,9 @@ type fnSig struct {
 	extern bool
 }
 
-// Lowerer holds state for a single build file pass.
-type Lowerer struct {
+// LoweringContext holds state for a single build file pass.
+type LoweringContext struct {
+	// builder manages a single functions IR construction.
 	builder *Builder
 
 	// scopes tracks block-local variable bindings from innermost to outermost.
@@ -41,6 +42,8 @@ type Lowerer struct {
 
 	// funcs tracks function signatures for all defined functions.
 	funcs map[string]fnSig
+
+	structs map[string]*ast.StructDecl
 
 	// For functions that return aggregate-like types (currently just strings)
 	// we need to pass a hidden sret pointer parameter for the return value.
@@ -57,39 +60,51 @@ type Lowerer struct {
 func CompileFile(file *ast.File) (*IRProgram, error) {
 	prog := &IRProgram{}
 
-	funcs := make(map[string]fnSig)
+	ctx := &LoweringContext{
+		funcs:   make(map[string]fnSig),
+		structs: make(map[string]*ast.StructDecl),
+		scopes:  []map[string]varInfo{},
+	}
 
+	// Copy the struct registry.
+	// This allows irTypeFromAstType to look up struct definitions.
+	for _, strct := range file.Structs {
+		ctx.structs[strct.Name] = strct
+	}
+
+	// Lower the extern function signatures.
 	for _, ext := range file.Externs {
-		irExt, err := buildExtern(ext)
+		irExt, err := ctx.buildExtern(ext)
 		if err != nil {
 			return nil, err
 		}
 
-		// Record the function sig.
-		funcs[irExt.Name] = fnSig{
+		prog.Externs = append(prog.Externs, irExt)
+
+		// Record the function sig for the extern as a normal function so it can
+		// be called from other functions.
+		ctx.funcs[irExt.Name] = fnSig{
 			args:   irExt.Args,
 			ret:    irExt.Return,
 			extern: true,
 		}
-
-		prog.Externs = append(prog.Externs, irExt)
 	}
 
 	// Record function signatures for all functions before building them, so that calls to other functions can find the sigs.
 	for _, fn := range file.Functions {
 		args := make([]Type, 0, len(fn.Params))
 		for _, p := range fn.Params {
-			args = append(args, irTypeFromAstType(p.Type))
+			args = append(args, ctx.irTypeFromAstType(p.Type))
 		}
 
-		funcs[fn.Name] = fnSig{
+		ctx.funcs[fn.Name] = fnSig{
 			args: args,
-			ret:  irTypeFromAstType(fn.ReturnType),
+			ret:  ctx.irTypeFromAstType(fn.ReturnType),
 		}
 	}
 
 	for _, fn := range file.Functions {
-		irFn, err := buildFunction(fn, funcs)
+		irFn, err := buildFunction(ctx, fn)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +115,7 @@ func CompileFile(file *ast.File) (*IRProgram, error) {
 	return prog, nil
 }
 
-func buildExtern(ext *ast.ExternFuncStmt) (*Extern, error) {
+func (l *LoweringContext) buildExtern(ext *ast.ExternFuncStmt) (*Extern, error) {
 	irExt := &Extern{
 		Name:   ext.Name,
 		Args:   []Type{},
@@ -108,39 +123,42 @@ func buildExtern(ext *ast.ExternFuncStmt) (*Extern, error) {
 	}
 
 	for _, argType := range ext.Params {
-		irExt.Args = append(irExt.Args, irTypeFromAstType(argType.Type))
+		irExt.Args = append(irExt.Args, l.irTypeFromAstType(argType.Type))
 	}
 
-	irExt.Return = irTypeFromAstType(ext.ReturnType)
+	irExt.Return = l.irTypeFromAstType(ext.ReturnType)
 
 	return irExt, nil
 }
 
 // buildFunction creates a new IR function and emits instructions for the function body.
-func buildFunction(fn *ast.FuncDecl, funcs map[string]fnSig) (*Function, error) {
+func buildFunction(ctx *LoweringContext, fn *ast.FuncDecl) (*Function, error) {
 	// Builder helps emit opcodes and the lowerer holds state across the process.
 	builder := NewBuilder(fn.Name, fn.IsPublic)
-
-	l := &Lowerer{
-		builder: builder,
-		funcs:   funcs,
-	}
+	ctx.builder = builder
 
 	// Create function-scope variables for the parameters before the body so they can be used in the body.
-	l.pushScope()
-	defer l.popScope()
+	ctx.pushScope()
+	defer ctx.popScope()
+
+	defer func() {
+		// When we're done here, reset the context state ready for the next function.
+		ctx.builder = nil
+		ctx.returnAddr = 0
+		ctx.hasReturnAddr = false
+	}()
 
 	// Emit param binds.
-	if err := l.bindFunctionParams(fn); err != nil {
+	if err := ctx.bindFunctionParams(fn); err != nil {
 		return nil, err
 	}
 
 	// Emit the body.
-	if err := l.emitBlock(fn.Body); err != nil {
+	if err := ctx.emitBlock(fn.Body); err != nil {
 		return nil, err
 	}
 
-	retType := irTypeFromAstType(fn.ReturnType)
+	retType := ctx.irTypeFromAstType(fn.ReturnType)
 
 	// Only void functions get an implicit trailing return.
 	if retType.Kind == TypeVoid && !blockTerminated(builder.CurrentBlock()) {
@@ -153,10 +171,10 @@ func buildFunction(fn *ast.FuncDecl, funcs map[string]fnSig) (*Function, error) 
 // buildStackFrame constructs a stack frame for the given function by looking for all instructions
 // that produce values that need to be stored on the stack. It tracks the offset and type of
 // each value for use in code generation.
-func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
-	abiParams := flattenFunctionABIParams(fn)
+func (l *LoweringContext) bindFunctionParams(fn *ast.FuncDecl) error {
+	abiParams := l.flattenFunctionABIParams(fn)
 	abiIndex := 0
-	retType := irTypeFromAstType(fn.ReturnType)
+	retType := l.irTypeFromAstType(fn.ReturnType)
 
 	// Use sret pointer for struct returns.
 	if ReturnsViaHiddenPtr(retType) {
@@ -167,7 +185,7 @@ func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
 	}
 
 	for _, param := range fn.Params {
-		paramType := irTypeFromAstType(param.Type)
+		paramType := l.irTypeFromAstType(param.Type)
 		addr := l.builder.Alloc(paramType)
 
 		// Check and remember the parameter in the current scope.
@@ -196,7 +214,7 @@ func (l *Lowerer) bindFunctionParams(fn *ast.FuncDecl) error {
 }
 
 // bindAggregateParam binds a struct parameter by recursively binding each field.
-func (l *Lowerer) bindAggregateParam(addr IRValue, t Type, abiParams []abiParam, abiIndex *int) {
+func (l *LoweringContext) bindAggregateParam(addr IRValue, t Type, abiParams []abiParam, abiIndex *int) {
 	if !t.IsStruct() {
 		// Single parameter case, just bind it directly.
 		paramVal := l.builder.Param(abiParams[*abiIndex].typ, *abiIndex)
@@ -218,10 +236,10 @@ func (l *Lowerer) bindAggregateParam(addr IRValue, t Type, abiParams []abiParam,
 // buildStackFrame constructs a stack frame for the given function by looking for all instructions
 // that produce values that need to be stored on the stack. It tracks the offset and type of
 // each value for use in code generation.
-func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
+func (l *LoweringContext) flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
 	params := make([]abiParam, 0, len(fn.Params)+1)
 
-	retType := irTypeFromAstType(fn.ReturnType)
+	retType := l.irTypeFromAstType(fn.ReturnType)
 
 	// Hidden sret pointer for struct returns.
 	if ReturnsViaHiddenPtr(retType) {
@@ -232,7 +250,7 @@ func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
 	}
 
 	for _, param := range fn.Params {
-		t := irTypeFromAstType(param.Type)
+		t := l.irTypeFromAstType(param.Type)
 		flat := flattenABIType(t)
 
 		// If the type doesn't flatten to multiple types, we can just pass it as a single parameter.
@@ -258,7 +276,7 @@ func flattenFunctionABIParams(fn *ast.FuncDecl) []abiParam {
 }
 
 // emitBlock iterates over the statements in the given block and emits instructions.
-func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
+func (l *LoweringContext) emitBlock(block *ast.BlockStmt) error {
 	l.pushScope()
 	defer l.popScope()
 
@@ -271,7 +289,7 @@ func (l *Lowerer) emitBlock(block *ast.BlockStmt) error {
 	return nil
 }
 
-func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
+func (l *LoweringContext) emitStmt(stmt ast.Stmt) error {
 	switch s := stmt.(type) {
 	case *ast.BreakStmt:
 		loopCtx, ok := l.currentLoop()
@@ -291,19 +309,18 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 
 	case *ast.AssignStmt:
 		// Emit instructions for the right-hand side expression.
+		addr, _, err := l.emitAddress(s.Target)
+		if err != nil {
+			return fmt.Errorf("invalid expression in assignment: %w", err)
+		}
+
 		val, err := l.emitExpr(s.Value)
 		if err != nil {
 			return fmt.Errorf("invalid expression in assignment: %w", err)
 		}
 
-		// Look up the variable's address.
-		v, ok := l.lookupVar(s.Name)
-		if !ok {
-			return fmt.Errorf("undefined variable: %s", s.Name)
-		}
-
 		// Emit a store instruction to update the variable's value.
-		l.builder.Store(v.addr, val)
+		l.builder.Store(addr, val)
 
 	case *ast.ForStmt:
 		return l.emitForLoop(s)
@@ -403,7 +420,7 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 		}
 	case *ast.VarDeclStmt:
 		// Create a new address value for the variable.
-		addr := l.builder.Alloc(irTypeFromAstType(s.Type))
+		addr := l.builder.Alloc(l.irTypeFromAstType(s.Type))
 
 		// Remember the variable name and its address.
 		if _, exists := l.currentScope()[s.Name]; exists {
@@ -411,7 +428,7 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 			panic(fmt.Sprintf("variable %s already declared", s.Name))
 		}
 
-		l.currentScope()[s.Name] = varInfo{addr: addr, typ: irTypeFromAstType(s.Type)}
+		l.currentScope()[s.Name] = varInfo{addr: addr, typ: l.irTypeFromAstType(s.Type)}
 
 		// If there is an initializer, emit instructions to compute its value and store it.
 		if s.Init != nil {
@@ -496,8 +513,15 @@ func (l *Lowerer) emitStmt(stmt ast.Stmt) error {
 	return nil
 }
 
-func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
+func (l *LoweringContext) emitExpr(expr ast.Expr) (IRValue, error) {
 	switch e := expr.(type) {
+	case *ast.FieldAccessExpr:
+		addr, fieldType, err := l.emitAddress(e)
+		if err != nil {
+			return 0, fmt.Errorf("invalid field access expression: %w", err)
+		}
+
+		return l.builder.Load(fieldType, addr), nil
 	case *ast.CallExpr:
 		// Emit instructions for the function call.
 		sig, ok := l.funcs[e.FuncName]
@@ -531,7 +555,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		return l.builder.Call(e.FuncName, sig.ret, args...), nil
 
 	case *ast.FloatLiteralExpr:
-		t := irTypeFromAstType(e.InferredType)
+		t := l.irTypeFromAstType(e.InferredType)
 
 		// Float bits are stored as a uint64 const.
 		switch t.Kind {
@@ -577,7 +601,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 			return 0, fmt.Errorf("invalid integer literal %s: %w", e.Literal, err)
 		}
 
-		t := irTypeFromAstType(e.InferredType)
+		t := l.irTypeFromAstType(e.InferredType)
 
 		return l.builder.Const(t, val), nil
 	case *ast.UnaryExpr:
@@ -589,7 +613,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 
 		switch e.Op {
 		case token.Sub:
-			t := irTypeFromAstType(e.InferredType)
+			t := l.irTypeFromAstType(e.InferredType)
 			return l.builder.Neg(t, val), nil
 		default:
 			return 0, fmt.Errorf("unsupported unary operator %s", e.Op)
@@ -609,7 +633,7 @@ func (l *Lowerer) emitExpr(expr ast.Expr) (IRValue, error) {
 		switch e.Op {
 		case token.Add, token.Sub, token.Mul, token.Div:
 			// Emit the binary operation instruction.
-			t := irTypeFromAstType(e.InferredType)
+			t := l.irTypeFromAstType(e.InferredType)
 			switch e.Op {
 			case token.Add:
 				return l.builder.Add(t, left, right), nil
@@ -643,11 +667,11 @@ func boolToInt(b bool) uint64 {
 	return 0
 }
 
-func (l *Lowerer) pushScope() {
+func (l *LoweringContext) pushScope() {
 	l.scopes = append(l.scopes, make(map[string]varInfo))
 }
 
-func (l *Lowerer) popScope() {
+func (l *LoweringContext) popScope() {
 	if len(l.scopes) == 0 {
 		panic("popScope called with empty scope stack")
 	}
@@ -655,7 +679,7 @@ func (l *Lowerer) popScope() {
 	l.scopes = l.scopes[:len(l.scopes)-1]
 }
 
-func (l *Lowerer) currentScope() map[string]varInfo {
+func (l *LoweringContext) currentScope() map[string]varInfo {
 	if len(l.scopes) == 0 {
 		panic("currentScope called with empty scope stack")
 	}
@@ -663,7 +687,7 @@ func (l *Lowerer) currentScope() map[string]varInfo {
 	return l.scopes[len(l.scopes)-1]
 }
 
-func (l *Lowerer) lookupVar(name string) (varInfo, bool) {
+func (l *LoweringContext) lookupVar(name string) (varInfo, bool) {
 	for i := len(l.scopes) - 1; i >= 0; i-- {
 		if v, ok := l.scopes[i][name]; ok {
 			return v, true
@@ -674,7 +698,7 @@ func (l *Lowerer) lookupVar(name string) (varInfo, bool) {
 }
 
 // irTypeFromAstType converts an AST type to an IR type.
-func irTypeFromAstType(astType *ast.TypeRef) Type {
+func (l *LoweringContext) irTypeFromAstType(astType *ast.TypeRef) Type {
 	switch t := astType.Kind; t {
 	case ast.TypeInt:
 		return Type{Kind: TypeI64}
@@ -710,8 +734,36 @@ func irTypeFromAstType(astType *ast.TypeRef) Type {
 		return Type{Kind: TypeFloat64}
 	case ast.TypeFloat:
 		return Type{Kind: TypeFloat64}
+	case ast.TypeCustom:
+		return l.irTypeFromCustom(astType)
 	default:
 		panic(fmt.Sprintf("unsupported AST type %d", astType.Kind))
+	}
+}
+
+func (l *LoweringContext) irTypeFromCustom(astType *ast.TypeRef) Type {
+	if astType == nil || astType.Kind != ast.TypeCustom {
+		panic("expected custom type")
+	}
+
+	s, ok := l.structs[astType.Name]
+	if !ok {
+		panic(fmt.Sprintf("unknown struct type: %s", astType.Name))
+	}
+
+	// Build fields.
+	fields := make([]Field, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		fields = append(fields, Field{
+			Name: f.Name,
+			Type: l.irTypeFromAstType(f.Type),
+		})
+	}
+
+	return Type{
+		Kind:   TypeStruct,
+		Name:   astType.Name,
+		Fields: fields,
 	}
 }
 
@@ -759,3 +811,40 @@ func flattenABIType(t Type) []Type {
 	return types
 }
 
+// emitAddress emits instructions to compute the address of an addressable expression (like a variable or field access).
+func (l *LoweringContext) emitAddress(expr ast.Expr) (IRValue, Type, error) {
+	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		// Look up the variable name and return its address.
+		v, ok := l.lookupVar(e.Name)
+		if !ok {
+			return 0, Type{}, fmt.Errorf("undefined variable: %s", e.Name)
+		}
+
+		return v.addr, v.typ, nil
+	case *ast.FieldAccessExpr:
+		// Emit instructions to compute the base address of the field access.
+		baseAddr, baseType, err := l.emitAddress(e.Base)
+		if err != nil {
+			return 0, Type{}, fmt.Errorf("invalid field access base: %w", err)
+		}
+
+		if !baseType.IsStruct() {
+			return 0, Type{}, fmt.Errorf("field access base must be a struct, got %v", baseType)
+		}
+
+		// Look up the field in the struct type to find its index and type.
+		for i, field := range baseType.Fields {
+			if field.Name == e.Field {
+				// Emit a FieldAddr instruction to compute the address of the field.
+				fieldAddr := l.builder.FieldAddr(baseAddr, FieldOffset(baseType, i), field.Type)
+				return fieldAddr, field.Type, nil
+			}
+		}
+
+		return 0, Type{}, fmt.Errorf("struct type %s has no field named %s", baseType.Name, e.Field)
+
+	default:
+		return 0, Type{}, fmt.Errorf("expression is not addressable: %T", expr)
+	}
+}

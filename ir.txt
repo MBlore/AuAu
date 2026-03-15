@@ -1,54 +1,22 @@
-func identity:
-block0:
-  t0:ptr<string> = param 0
-  t1:ptr<string> = alloc
-  t2:ptr<ptr<u8>> = fieldaddr t1, 0
-  t3:ptr<u8> = param 1
-  store t2, t3
-  t4:ptr<i64> = fieldaddr t1, 8
-  t5:i64 = param 2
-  store t4, t5
-  t6:string = load t1
-  store t0, t6
-  ret
-func greet:
-block0:
-  t0:ptr<string> = param 0
-  t1:string = string const "hello from function" bytes=[104 101 108 108 111 32 102 114 111 109 32 102 117 110 99 116 105 111 110]
-  store t0, t1
-  ret
-func half:
-block0:
-  t0:f64 = const 4602678819172646912
-  ret t0
 func main:
 block0:
-  t0:ptr<string> = alloc
-  t1:string = string const "input string" bytes=[105 110 112 117 116 32 115 116 114 105 110 103]
-  store t0, t1
-  t2:ptr<string> = alloc
-  t3:string = load t0
-  t4:string = call identity(t3)
-  store t2, t4
-  t5:ptr<string> = alloc
-  t6:string = call greet()
-  store t5, t6
-  t7:ptr<f64> = alloc
-  t8:f64 = call half()
-  store t7, t8
-  t9:string = load t0
-  print t9
-  t10:string = load t2
-  print t10
-  t11:string = load t5
-  print t11
-  t12:f64 = load t7
-  t13:f64 = const 4602678819172646912
-  t14:bool = cmp eq t12, t13
-  br t14, block1(then), block2(end)
-block1:
-  t15:string = string const "float ok" bytes=[102 108 111 97 116 32 111 107]
-  print t15
-  jmp block2(end)
-block2:
+  t0:ptr<struct A {b: struct B {c: struct C {value: i64}}}> = alloc
+  t1:ptr<struct B {c: struct C {value: i64}}> = fieldaddr t0, 0
+  t2:ptr<struct C {value: i64}> = fieldaddr t1, 0
+  t3:ptr<i64> = fieldaddr t2, 0
+  t4:i64 = const 42
+  store t3, t4
+  t5:ptr<struct B {c: struct C {value: i64}}> = fieldaddr t0, 0
+  t6:ptr<struct C {value: i64}> = fieldaddr t5, 0
+  t7:struct C {value: i64} = load t6
+  t8:i64 = call test(t7)
+  print t8
   ret
+func test:
+block0:
+  t0:ptr<struct C {value: i64}> = alloc
+  t1:i64 = param 0
+  store t0, t1
+  t2:ptr<i64> = fieldaddr t0, 0
+  t3:i64 = load t2
+  ret t3

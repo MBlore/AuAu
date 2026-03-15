@@ -11,14 +11,14 @@ type loopContext struct {
 	continueBlock *Block
 }
 
-func (l *Lowerer) pushLoop(breakBlock, continueBlock *Block) {
+func (l *LoweringContext) pushLoop(breakBlock, continueBlock *Block) {
 	l.loops = append(l.loops, loopContext{
 		breakBlock:    breakBlock,
 		continueBlock: continueBlock,
 	})
 }
 
-func (l *Lowerer) popLoop() {
+func (l *LoweringContext) popLoop() {
 	if len(l.loops) == 0 {
 		panic("popLoop called with empty loop stack")
 	}
@@ -26,7 +26,7 @@ func (l *Lowerer) popLoop() {
 	l.loops = l.loops[:len(l.loops)-1]
 }
 
-func (l *Lowerer) currentLoop() (loopContext, bool) {
+func (l *LoweringContext) currentLoop() (loopContext, bool) {
 	if len(l.loops) == 0 {
 		return loopContext{}, false
 	}
@@ -34,7 +34,7 @@ func (l *Lowerer) currentLoop() (loopContext, bool) {
 	return l.loops[len(l.loops)-1], true
 }
 
-func (l *Lowerer) emitForLoop(s *ast.ForStmt) error {
+func (l *LoweringContext) emitForLoop(s *ast.ForStmt) error {
 	// For loops are a bit more complex since they can have an init statement, a condition, and a post statement.
 	initBlock := l.builder.NewBlock("for_init")
 	condBlock := l.builder.NewBlock("for_cond")

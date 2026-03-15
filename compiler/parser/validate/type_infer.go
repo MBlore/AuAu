@@ -35,6 +35,18 @@ func inferTypesInBlock(ctx *validateContext, block *ast.BlockStmt, scope map[str
 func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast.TypeRef, returnType *ast.TypeRef) {
 	switch s := stmt.(type) {
 	case *ast.CallStmt:
+		// Special case, allow built-in print to validate.
+		if s.FuncName == "print" {
+			if len(s.Args) != 1 {
+				ctx.addError(s.NodeMeta, "print statement requires exactly one argument")
+				return
+			}
+
+			inferExprDefaultType(ctx, scope, s.Args[0])
+			return
+		}
+
+		// For other calls, validate them as expressions.
 		call := &ast.CallExpr{
 			NodeMeta: ast.NodeMeta{
 				Line: s.Line,
@@ -43,7 +55,9 @@ func inferTypesInStmt(ctx *validateContext, stmt ast.Stmt, scope map[string]*ast
 			FuncName: s.FuncName,
 			Args:     s.Args,
 		}
+
 		validateCallExpr(ctx, scope, call)
+
 	case *ast.ReturnStmt:
 		if s.ReturnExpr != nil {
 			validateExprType(ctx, scope, returnType, s.ReturnExpr)
