@@ -12,7 +12,7 @@
 
 ## Package Declaration
 
-`package "main"`
+`package main`
 
 Must be declared first in a source file.
 The package name must be a string literal.

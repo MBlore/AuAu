@@ -18,11 +18,28 @@ func (p *Parser) parseNewExpr() (ast.Expr, error) {
 // parseExpr will parse all types of RHS expressions, using a Pratt Parsing method.
 // It looks across multiple tokens and builds the binary operations tree.
 func (p *Parser) parseExpr(minBP int) (ast.Expr, error) {
+
+	// First we parse the left-hand side of the expression,
+	// which can be a primary expression (identifier, literal, parenthesized expression)
+	// or a prefix expression. A prefix expression is an operator that comes before its operand,
+	// like "-a" or "!b".
 	left, err := p.parsePrimary()
 	if err != nil {
 		return nil, err
 	}
 
+	// After parsing the left-hand side, we check if there are any postfix operators that can be applied to it,
+	// such as function calls or field accesses. We loop to handle multiple postfix operators in a row,
+	// e.g. "a.b.c()" would be parsed as a field access of "a" to "b", followed by another field access to "c",
+	// followed by a function call.
+	left, err = p.parsePostfix(left)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now we check if there are any infix operators that can be applied to the left-hand side.
+	// Infix operators are binary operators that come between their operands, like "a + b" or "x * y".
+	// We loop to handle multiple binary operators in a row, e.g. "a + b * c - d".
 	for {
 		op := p.peek()
 		bp := infixBindingPower(op.Type)
@@ -55,7 +72,6 @@ func (p *Parser) parseExpr(minBP int) (ast.Expr, error) {
 }
 
 // parsePrimary parses primary expressions: identifiers, literals, and parenthesized expressions.
-// Note however that paranthesized expressions are parsed recursively, so they can contain any expression, not just primaries.
 func (p *Parser) parsePrimary() (ast.Expr, error) {
 	tok := p.peek()
 
@@ -63,41 +79,10 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 	case token.Ident:
 		p.advance()
 
-		// If the next token is a '(', then this is a function call, otherwise it's just an identifier.
-		if p.peek().Type == token.LParen {
-			call := &ast.CallExpr{
-				FuncName: tok.Literal,
-				NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
-			}
-
-			p.advance() // skip '('
-
-			args := []ast.Expr{}
-
-			for p.peek().Type != token.RParen {
-				arg, err := p.parseNewExpr()
-				if err != nil {
-					return nil, fmt.Errorf("invalid argument expression in function call: %w", err)
-				}
-
-				args = append(args, arg)
-
-				if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
-					return nil, errors.New("expected ',' or ')' after function call argument")
-				}
-
-				if p.peek().Type == token.Comma {
-					p.advance()
-				}
-			}
-
-			p.advance() // skip ')'
-
-			call.Args = args
-			return call, nil
-		}
-
-		return &ast.IdentExpr{Name: tok.Literal, NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col}}, nil
+		return &ast.IdentExpr{
+			Name:     tok.Literal,
+			NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
+		}, nil
 
 	case token.LParen:
 		p.advance()
@@ -196,4 +181,89 @@ func prefixBindingPower(op token.TokenType) int {
 
 	// Not a prefix operator.
 	return -1
+}
+
+// parseCallSuffix parses the suffix of a function call after the function name has been parsed as an identifier.
+func (p *Parser) parseCallSuffix(callee *ast.IdentExpr) (ast.Expr, error) {
+	call := &ast.CallExpr{
+		FuncName: callee.Name,
+		NodeMeta: callee.NodeMeta,
+	}
+
+	p.advance() // skip '('
+
+	args := []ast.Expr{}
+
+	for p.peek().Type != token.RParen {
+		arg, err := p.parseNewExpr()
+		if err != nil {
+			return nil, fmt.Errorf("invalid argument expression in function call: %w", err)
+		}
+
+		args = append(args, arg)
+
+		if p.peek().Type != token.Comma && p.peek().Type != token.RParen {
+			return nil, errors.New("expected ',' or ')' after function call argument")
+		}
+
+		if p.peek().Type == token.Comma {
+			p.advance()
+		}
+	}
+
+	p.advance() // skip ')'
+
+	call.Args = args
+	return call, nil
+}
+
+// parsePostfix parses postfix expressions like function calls and field accesses after the primary expression has been parsed.
+func (p *Parser) parsePostfix(expr ast.Expr) (ast.Expr, error) {
+	for {
+		switch p.peek().Type {
+		case token.LParen:
+			ident, ok := expr.(*ast.IdentExpr)
+			if !ok {
+				return nil, errors.New("expected function name before '('")
+			}
+
+			nextExpr, err := p.parseCallSuffix(ident)
+			if err != nil {
+				return nil, err
+			}
+			expr = nextExpr
+
+		case token.Dot:
+			nextExpr, err := p.parseFieldAccessSuffix(expr)
+			if err != nil {
+				return nil, err
+			}
+			expr = nextExpr
+
+		default:
+			return expr, nil
+		}
+	}
+}
+
+// parseFieldAccessSuffix parses the suffix of a field access after the base expression has been parsed.
+// For example, in "a.b", after parsing "a" as the base expression, this function will parse the ".b" part
+// and return a FieldAccessExpr.
+func (p *Parser) parseFieldAccessSuffix(base ast.Expr) (ast.Expr, error) {
+	dotTok := p.peek()
+	p.advance() // skip '.'
+
+	fieldTok, err := p.expect(token.Ident)
+	if err != nil {
+		return nil, fmt.Errorf("expected field name after '.': %w", err)
+	}
+
+	return &ast.FieldAccessExpr{
+		Base:  base,
+		Field: fieldTok.Literal,
+		NodeMeta: ast.NodeMeta{
+			Line: dotTok.Line,
+			Col:  dotTok.Col,
+		},
+	}, nil
 }

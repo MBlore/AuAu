@@ -10,7 +10,7 @@ const (
 	TypeInvalid TypeKind = iota
 	TypeVoid
 	TypeNull
-
+	TypeCustom // Used for custom struct types before we resolve them to actual struct definitions.
 	TypeInt
 	TypeInt64
 	TypeInt32
@@ -32,6 +32,7 @@ const (
 
 type TypeRef struct {
 	Kind TypeKind
+	Name string // For user-defined types, this will be the type name.
 }
 
 var (
@@ -61,6 +62,7 @@ type File struct {
 
 	Functions []*FuncDecl
 	Externs   []*ExternFuncStmt
+	Structs   []*StructDecl
 }
 
 type Comment struct {
@@ -228,8 +230,9 @@ func (*ContinueStmt) isStmt() {}
 
 type AssignStmt struct {
 	NodeMeta
-	Name  string
-	Value Expr
+	Name   string
+	Target Expr
+	Value  Expr
 }
 
 func (*AssignStmt) isStmt() {}
@@ -251,3 +254,24 @@ type CallExpr struct {
 }
 
 func (*CallExpr) isExpr() {}
+
+type StructField struct {
+	Name string
+	Type *TypeRef
+}
+
+type StructDecl struct {
+	NodeMeta
+	Name   string
+	Fields []StructField
+}
+
+func (*StructDecl) isStmt() {}
+
+type FieldAccessExpr struct {
+	NodeMeta
+	Base  Expr
+	Field string
+}
+
+func (*FieldAccessExpr) isExpr() {}

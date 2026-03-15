@@ -10,7 +10,7 @@ import (
 )
 
 func TestSuccessParse(t *testing.T) {
-	code := `package "main"`
+	code := `package main`
 	lexer := lexer.NewLexer(code)
 	lexResult := lexer.Lex()
 	parser := NewParser("test.auau", lexResult.Tokens)
@@ -42,19 +42,21 @@ func TestPackageFirstTokenError(t *testing.T) {
 }
 
 func TestPackageFormat(t *testing.T) {
-	code := "package main"
+	code := "package \"main\""
+
 	lexer := lexer.NewLexer(code)
 	lexResult := lexer.Lex()
+
 	parser := NewParser("test.auau", lexResult.Tokens)
 	pr := parser.Parse()
 
-	if len(pr.Errors) != 1 || !strings.Contains(pr.Errors[0].Error(), "expected package name string") {
+	if len(pr.Errors) != 1 || !strings.Contains(pr.Errors[0].Error(), "expected package name") {
 		t.Errorf("Expected 1 error about package declaration, got %d: %v", len(pr.Errors), pr.Errors)
 	}
 }
 
 func TestPeakAheadReturnsEOF(t *testing.T) {
-	code := `package "main"`
+	code := `package main`
 	lexer := lexer.NewLexer(code)
 	lexResult := lexer.Lex()
 	parser := NewParser("test.auau", lexResult.Tokens)
@@ -65,7 +67,7 @@ func TestPeakAheadReturnsEOF(t *testing.T) {
 }
 
 func TestPeakReturnsEOF(t *testing.T) {
-	code := `package "main"`
+	code := `package main`
 	lexer := lexer.NewLexer(code)
 	lexResult := lexer.Lex()
 	parser := NewParser("test.auau", lexResult.Tokens)
@@ -81,7 +83,7 @@ func TestPeakReturnsEOF(t *testing.T) {
 }
 
 func TestReadOneFunc(t *testing.T) {
-	input := `package "main"
+	input := `package main
 
 	void main() {
 	}`
@@ -115,7 +117,7 @@ func TestReadOneFunc(t *testing.T) {
 }
 
 func TestReadTwoFuncs(t *testing.T) {
-	input := `package "main"
+	input := `package main
 
 	void main() {
 	}
@@ -156,7 +158,7 @@ func TestReadTwoFuncs(t *testing.T) {
 }
 
 func TestAssignmentParsing(t *testing.T) {
-	input := `package "main"
+	input := `package main
 	void main() {
 		int a = 1 + 2
 		int b = 1 + 2 + 3
@@ -179,7 +181,7 @@ func TestAssignmentParsing(t *testing.T) {
 }
 
 func TestAssignmentParsingNested(t *testing.T) {
-	input := `package "main"
+	input := `package main
 	void main() {
 		int a = 1 + (2 * -3) - 4 / 2
 	}`
@@ -199,7 +201,7 @@ func TestAssignmentParsingNested(t *testing.T) {
 }
 
 func TestVariableTypesParsing(t *testing.T) {
-	input := `package "main"
+	input := `package main
 	void main() {
 		int a = 1
 
@@ -252,7 +254,7 @@ func TestVariableTypesParsing(t *testing.T) {
 }
 
 func TestParsesExterns(t *testing.T) {
-	input := `package "main"
+	input := `package main
 
 	extern int printf(string format)
 
@@ -272,5 +274,115 @@ func TestParsesExterns(t *testing.T) {
 
 	if len(pr.File.Externs) != 1 {
 		t.Errorf("Expected 1 extern function, got %d", len(pr.File.Externs))
+	}
+}
+
+func TestParseStructDecl(t *testing.T) {
+	input := `package main
+
+	struct Point {
+		x int
+		y int
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	if len(pr.File.Structs) != 1 {
+		t.Errorf("Expected 1 struct declaration, got %d", len(pr.File.Structs))
+		return
+	}
+
+	pointStruct := pr.File.Structs[0]
+	if pointStruct.Name != "Point" {
+		t.Errorf("Expected struct name 'Point', got '%s'", pointStruct.Name)
+	}
+
+	if len(pointStruct.Fields) != 2 {
+		t.Errorf("Expected 2 fields in struct, got %d", len(pointStruct.Fields))
+		return
+	}
+
+	if pointStruct.Fields[0].Name != "x" || pointStruct.Fields[0].Type.Kind != ast.TypeInt {
+		t.Errorf("Expected first field to be 'x int', got '%s %v'", pointStruct.Fields[0].Name, pointStruct.Fields[0].Type)
+	}
+
+	if pointStruct.Fields[1].Name != "y" || pointStruct.Fields[1].Type.Kind != ast.TypeInt {
+		t.Errorf("Expected second field to be 'y int', got '%s %v'", pointStruct.Fields[1].Name, pointStruct.Fields[1].Type)
+	}
+}
+
+func TestStructUsage(t *testing.T) {
+	input := `package main
+	struct Point {
+		x int
+		y int
+	}
+
+	void main() {
+		Point p
+		p.x = 10
+	}
+
+	void PrintPoint(Point pt) {
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Errorf("Expected 0 errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+}
+
+func TestNestedStructs(t *testing.T) {
+	input := `package main
+	struct C {
+		value int
+	}
+
+	struct B {
+		c C
+	}
+
+	struct A {
+		b B
+	}
+
+	void main() {
+		A a
+		a.b.c.value = 42
+		print(a.b.c.value)
+	}`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 lexer errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Fatalf("Expected 0 parser errors, got %d: %v", len(pr.Errors), pr.Errors)
 	}
 }

@@ -75,6 +75,9 @@ func (l *Lexer) nextToken() (token.Token, error) {
 	startCol := l.col
 
 	switch ch {
+	case '.':
+		l.advance()
+		return token.Token{Type: token.Dot, Literal: ".", Line: startLine, Col: startCol}, nil
 	case ';':
 		l.advance()
 		return token.Token{Type: token.Semicolon, Literal: ";", Line: startLine, Col: startCol}, nil

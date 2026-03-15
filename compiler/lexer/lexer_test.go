@@ -9,7 +9,7 @@ import (
 )
 
 func TestLexPackageName(t *testing.T) {
-	input := `package "main"`
+	input := `package main`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
@@ -21,15 +21,15 @@ func TestLexPackageName(t *testing.T) {
 	if result.Tokens[0].Type != token.Package {
 		t.Errorf("Expected token type %s, got %s", token.Package, result.Tokens[0].Type)
 	}
-	if result.Tokens[1].Type != token.String {
-		t.Errorf("Expected token type %s, got %s", token.String, result.Tokens[1].Type)
+	if result.Tokens[1].Type != token.Ident {
+		t.Errorf("Expected token type %s, got %s", token.Ident, result.Tokens[1].Type)
 	}
 }
 
 func TestLexComments(t *testing.T) {
 	input := `// Test
 	/* Test */
-	/* Test */package "main"/* Test */`
+	/* Test */package main/* Test */`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
@@ -40,7 +40,7 @@ func TestLexComments(t *testing.T) {
 
 func TestRowLineReporting(t *testing.T) {
 	input := `// New Line
-	package "main"`
+	package main`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
@@ -57,54 +57,8 @@ func TestRowLineReporting(t *testing.T) {
 	}
 }
 
-func TestStringTokensHaveBytes(t *testing.T) {
-	input := `package "main"`
-
-	lexer := NewLexer(input)
-	result := lexer.Lex()
-
-	if len(result.Tokens) != 2 {
-		t.Errorf("Expected 2 tokens, got %d", len(result.Tokens))
-	}
-
-	if result.Tokens[1].Type != token.String || result.Tokens[1].Bytes == nil {
-		t.Errorf("Expected string token to have bytes.")
-	}
-}
-
-func TestStringParseErrorWithNewLines(t *testing.T) {
-	input := `package "ma
-	in"`
-
-	lexer := NewLexer(input)
-	result := lexer.Lex()
-
-	if len(result.Errors) != 1 {
-		t.Errorf("Expected 1 error, got %d", len(result.Errors))
-	}
-
-	if !strings.Contains(result.Errors[0].Error(), "newline not allowed") {
-		t.Errorf("Expected new not allowed error, got '%s'.", result.Errors[0].Error())
-	}
-}
-
-func TestUnterminatedString(t *testing.T) {
-	input := `package "main`
-
-	lexer := NewLexer(input)
-	result := lexer.Lex()
-
-	if len(result.Errors) != 1 {
-		t.Errorf("Expected 1 error, got %d", len(result.Errors))
-	}
-
-	if !strings.Contains(result.Errors[0].Error(), "unterminated string literal") {
-		t.Errorf("Expected new not allowed error, got '%s'.", result.Errors[0].Error())
-	}
-}
-
 func TestIllegalChar(t *testing.T) {
-	input := `package "main"¬`
+	input := `package main¬`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
@@ -119,7 +73,7 @@ func TestIllegalChar(t *testing.T) {
 }
 
 func TestUnterminatedCommentBlock(t *testing.T) {
-	input := `package "main" /* Comment`
+	input := `package main /* Comment`
 
 	lexer := NewLexer(input)
 	result := lexer.Lex()
@@ -157,7 +111,7 @@ func TestPeekAheadCanReturnZero(t *testing.T) {
 }
 
 func TestBasicProgram(t *testing.T) {
-	input := `package "main"
+	input := `package main
 
 	void main() {
 		int a = 1 + 2 * 3 - 1 / 2 + (1 + 1)

@@ -1,31 +1,19 @@
-package "main"
+package main
 
-extern void print(string text)
+	struct C {
+		value int
+	}
 
-string identity(string text) {
-    return text
-}
+	struct B {
+		c C
+	}
 
-string greet() {
-    return "hello from function"
-}
+	struct A {
+		b B
+	}
 
-float64 half() {
-    return 0.5
-}
-
-void main() {
-    string a = "input string"
-    string b = identity(a)
-    string c = greet()
-    float64 x = half()
-
-    print(a)
-    print(b)
-    print(c)
-
-    // Keep the float result alive so the compiler has to lower the call and return path.
-    if x == 0.5 {
-        print("float ok")
-    }
-}
+	void main() {
+		A a
+		a.b.c.value = 42
+		//print(a.b.c.value)
+	}

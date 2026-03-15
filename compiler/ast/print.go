@@ -21,6 +21,10 @@ func NewAstPrinter(file *File) *AstPrinter {
 func (p *AstPrinter) Print() string {
 	p.buff.WriteString(p.prefix() + "package " + p.file.PackageName + "\n")
 
+	for _, s := range p.file.Structs {
+		p.printStructDecl(s)
+	}
+
 	for _, f := range p.file.Functions {
 		p.printFuncDecl(f)
 	}
@@ -28,17 +32,26 @@ func (p *AstPrinter) Print() string {
 	return p.buff.String()
 }
 
+func (p *AstPrinter) printStructDecl(s *StructDecl) {
+	fmt.Fprintf(&p.buff, "%sStructDecl %s\n", p.prefix(), s.Name)
+	p.indentLevel++
+	for _, field := range s.Fields {
+		fmt.Fprintf(&p.buff, "%sField %s %s\n", p.prefix(), field.Name, TypeToString(field.Type))
+	}
+	p.indentLevel--
+}
+
 func (p *AstPrinter) printFuncDecl(f *FuncDecl) {
 	fmt.Fprintf(&p.buff, "%sFuncDecl %s(", p.prefix(), f.Name)
 
 	for i, param := range f.Params {
-		p.buff.WriteString(TypeKindToString(param.Type.Kind) + " " + param.Name)
+		p.buff.WriteString(TypeToString(param.Type) + " " + param.Name)
 		if i < len(f.Params)-1 {
 			p.buff.WriteString(", ")
 		}
 	}
 
-	fmt.Fprintf(&p.buff, ") return=%s public=%v\n", TypeKindToString(f.ReturnType.Kind), f.IsPublic)
+	fmt.Fprintf(&p.buff, ") return=%s public=%v\n", TypeToString(f.ReturnType), f.IsPublic)
 
 	p.printBlock(f.Body)
 }
@@ -58,15 +71,18 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		fmt.Fprintf(&p.buff, "%sExternFuncStmt %s(", p.prefix(), s.Name)
 
 		for i, param := range s.Params {
-			p.buff.WriteString(TypeKindToString(param.Type.Kind) + " " + param.Name)
+			p.buff.WriteString(TypeToString(param.Type) + " " + param.Name)
 			if i < len(s.Params)-1 {
 				p.buff.WriteString(", ")
 			}
 		}
 
-		fmt.Fprintf(&p.buff, ") return=%s\n", TypeKindToString(s.ReturnType.Kind))
+		fmt.Fprintf(&p.buff, ") return=%s\n", TypeToString(s.ReturnType))
 	case *AssignStmt:
-		fmt.Fprintf(&p.buff, "%sAssignStmt %s =\n", p.prefix(), s.Name)
+		fmt.Fprintf(&p.buff, "%sAssignStmt\n", p.prefix())
+		fmt.Fprintf(&p.buff, "%sTarget:\n", strings.Repeat("  ", p.indentLevel+1))
+		p.printExpr(s.Target, p.indentLevel+2)
+		fmt.Fprintf(&p.buff, "%sValue:\n", strings.Repeat("  ", p.indentLevel+1))
 		p.printExpr(s.Value, p.indentLevel+1)
 	case *ForStmt:
 		fmt.Fprintf(&p.buff, "%sForStmt\n", p.prefix())
@@ -114,10 +130,10 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		}
 	case *VarDeclStmt:
 		if s.Init != nil {
-			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s = \n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s = \n", p.prefix(), s.Name, TypeToString(s.Type))
 			p.printExpr(s.Init, p.indentLevel+1)
 		} else {
-			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s\n", p.prefix(), s.Name, TypeKindToString(s.Type.Kind))
+			fmt.Fprintf(&p.buff, "%sVarDeclStmt %s %s\n", p.prefix(), s.Name, TypeToString(s.Type))
 		}
 	case *IfStmt:
 		fmt.Fprintf(&p.buff, "%sIfStmt\n", p.prefix())
@@ -153,6 +169,9 @@ func (p *AstPrinter) printExpr(expr Expr, indent int) {
 		}
 	case *IdentExpr:
 		fmt.Fprintf(&p.buff, "%sIdentExpr(%s)\n", pad, e.Name)
+	case *FieldAccessExpr:
+		fmt.Fprintf(&p.buff, "%sFieldAccessExpr(.%s)\n", pad, e.Field)
+		p.printExpr(e.Base, indent+1)
 	case *IntLiteralExpr:
 		fmt.Fprintf(&p.buff, "%sIntLiteralExpr(%s)\n", pad, e.Literal)
 	case *UnaryExpr:

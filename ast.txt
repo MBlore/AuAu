@@ -1,39 +1,18 @@
 package main
-FuncDecl identity(string text) return=string public=false
-BlockStmt
-  ReturnStmt
-    IdentExpr(text)
-FuncDecl greet() return=string public=false
-BlockStmt
-  ReturnStmt
-    StringLiteralExpr("hello from function")
-FuncDecl half() return=float64 public=false
-BlockStmt
-  ReturnStmt
-    UnknownExpr(*ast.FloatLiteralExpr)
+StructDecl C
+  Field value int
+StructDecl B
+  Field c C
+StructDecl A
+  Field b B
 FuncDecl main() return=void public=false
 BlockStmt
-  VarDeclStmt a string = 
-    StringLiteralExpr("input string")
-  VarDeclStmt b string = 
-    CallExpr identity
-      IdentExpr(a)
-  VarDeclStmt c string = 
-    CallExpr greet
-  VarDeclStmt x float64 = 
-    CallExpr half
-  CallStmt print
-    IdentExpr(a)
-  CallStmt print
-    IdentExpr(b)
-  CallStmt print
-    IdentExpr(c)
-  IfStmt
-    Cond:
-      BinaryExpr(==)
-        IdentExpr(x)
-        UnknownExpr(*ast.FloatLiteralExpr)
-    Then:
-    BlockStmt
-      CallStmt print
-        StringLiteralExpr("float ok")
+  VarDeclStmt a A
+  AssignStmt
+    Target:
+      FieldAccessExpr(.value)
+        FieldAccessExpr(.c)
+          FieldAccessExpr(.b)
+            IdentExpr(a)
+    Value:
+    IntLiteralExpr(42)

@@ -37,18 +37,20 @@ func (p *Parser) Parse() ParseResult {
 		return ParseResult{Errors: p.errors}
 	}
 
-	// ...followed by the package name.
-	tokPackageName, err := p.expect(token.String)
+	// ...followed by the package name as an identifier.
+	tokPackageName, err := p.expect(token.Ident)
 	if err != nil {
-		p.addError(tokPackageName, errors.New("expected package name string after 'package' keyword, e.g. 'package \"main\"'"))
+		p.addError(tokPackageName, errors.New("expected package name string after 'package' keyword, e.g. 'package main'"))
 		return ParseResult{Errors: p.errors}
 	}
 
 	funcs := []*ast.FuncDecl{}
 	externs := []*ast.ExternFuncStmt{}
+	structs := []*ast.StructDecl{}
 
 	for p.peek().Type != token.EOF {
-		if p.peek().Type == token.Extern {
+		switch p.peek().Type {
+		case token.Extern:
 			// Handle extern function declarations.
 			externFunc, err := p.parseExternFuncDecl()
 			if err != nil {
@@ -58,27 +60,85 @@ func (p *Parser) Parse() ParseResult {
 			}
 
 			externs = append(externs, externFunc)
-			continue
-		}
 
-		// We're only expecting function declarations at the moment.
-		f, err := p.parseFuncDecl()
-		if err != nil {
-			// Peek on error as parsing would have advanced.
-			p.addError(p.peek(), err)
-			return ParseResult{Errors: p.errors}
-		}
+		case token.Struct:
+			structDecl, err := p.parseStructDecl()
+			if err != nil {
+				// Peek on error as parsing would have advanced.
+				p.addError(p.peek(), err)
+				return ParseResult{Errors: p.errors}
+			}
 
-		funcs = append(funcs, f)
+			structs = append(structs, structDecl)
+
+		default:
+			// Function declaration.
+			f, err := p.parseFuncDecl()
+			if err != nil {
+				// Peek on error as parsing would have advanced.
+				p.addError(p.peek(), err)
+				return ParseResult{Errors: p.errors}
+			}
+
+			funcs = append(funcs, f)
+		}
 	}
 
 	sourceFile := ast.File{
 		PackageName: tokPackageName.Literal,
 		Functions:   funcs,
 		Externs:     externs,
+		Structs:     structs,
 	}
 
 	return ParseResult{File: &sourceFile, Errors: p.errors}
+}
+
+func (p *Parser) parseStructDecl() (*ast.StructDecl, error) {
+	p.advance() // Consume 'struct' keyword.
+
+	structNameTok, err := p.expect(token.Ident)
+	if err != nil {
+		return nil, errors.New("expected struct name after 'struct' keyword")
+	}
+
+	_, err = p.expect(token.LBrace)
+	if err != nil {
+		return nil, errors.New("expected '{' to start struct declaration")
+	}
+
+	fields := []ast.StructField{}
+
+	for p.peek().Type != token.RBrace {
+		name, err := p.expect(token.Ident)
+		if err != nil {
+			return nil, errors.New("expected field name in struct declaration")
+		}
+
+		fieldType, err := p.parseType()
+		if err != nil {
+			return nil, errors.New("expected field type in struct declaration")
+		}
+
+		fields = append(fields, ast.StructField{
+			Name: name.Literal,
+			Type: fieldType,
+		})
+	}
+
+	_, err = p.expect(token.RBrace)
+	if err != nil {
+		return nil, errors.New("expected '}' to end struct declaration")
+	}
+
+	return &ast.StructDecl{
+		NodeMeta: ast.NodeMeta{
+			Line: structNameTok.Line,
+			Col:  structNameTok.Col,
+		},
+		Name:   structNameTok.Literal,
+		Fields: fields,
+	}, nil
 }
 
 func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
@@ -103,6 +163,10 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 	}
 
 	return &ast.FuncDecl{
+		NodeMeta: ast.NodeMeta{
+			Line: funcName.Line,
+			Col:  funcName.Col,
+		},
 		Name:       funcName.Literal,
 		ReturnType: retType,
 		Params:     params,
@@ -159,23 +223,66 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 		return p.parseForStmt()
 
 	case token.Ident:
-		// Assign?
-		if p.peekAhead(1).Type == token.Equals {
-			varName := tok.Literal
+		// Variable declaration?
+		if p.peekAhead(1).Type == token.Ident {
+			varType, err := p.parseType()
+			if err != nil {
+				return nil, errors.New("expected type in variable declaration")
+			}
 
-			p.advance()
-			p.advance()
+			varName, err := p.expect(token.Ident)
+			if err != nil {
+				return nil, errors.New("expected variable name after type in variable declaration")
+			}
 
-			initExpr, err := p.parseNewExpr()
+			// Parse the expression initializer if theres an equals sign after the variable name.
+			var initExpr ast.Expr
+			if p.peek().Type == token.Equals {
+				p.advance()
+				var err error
+				initExpr, err = p.parseNewExpr()
+				if err != nil {
+					return nil, errors.New("invalid initializer expression after '=' in variable declaration")
+				}
+			}
+
+			return &ast.VarDeclStmt{
+				NodeMeta: ast.NodeMeta{
+					Line: varName.Line,
+					Col:  varName.Col,
+				},
+				Name: varName.Literal,
+				Type: varType,
+				Init: initExpr,
+			}, nil
+		}
+
+		// Assignment?
+		savedPos := p.pos
+		target, err := p.parseAssignmentTarget()
+
+		// If we successfully parsed an assignment target and the next token is an equals sign,
+		// then we can parse this as an assignment statement.
+		if err == nil && p.peek().Type == token.Equals {
+			p.advance() // skip '='
+
+			valueExpr, err := p.parseNewExpr()
 			if err != nil {
 				return nil, fmt.Errorf("invalid initializer expression in assignment statement: %w", err)
 			}
 
 			return &ast.AssignStmt{
-				Name:  varName,
-				Value: initExpr,
+				NodeMeta: ast.NodeMeta{
+					Line: tok.Line,
+					Col:  tok.Col,
+				},
+				Target: target,
+				Value:  valueExpr,
 			}, nil
 		}
+
+		// If it wasn't an assignment, then we backtrack and see if it's now something else.
+		p.pos = savedPos
 
 		// Function call?
 		if p.peekAhead(1).Type == token.LParen {
@@ -236,7 +343,7 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 			return nil, errors.New("expected variable name after type in variable declaration")
 		}
 
-		// Parse the expression initializer if theres an equals sign after the variable name.
+		// Parse the expression initializer if there's an equals sign after the variable name.
 		var initExpr ast.Expr
 		if p.peek().Type == token.Equals {
 			p.advance()
@@ -249,11 +356,43 @@ func (p *Parser) parseStatement() (ast.Stmt, error) {
 		}
 
 		return &ast.VarDeclStmt{
+			NodeMeta: ast.NodeMeta{
+				Line: varName.Line,
+				Col:  varName.Col,
+			},
 			Name: varName.Literal,
 			Type: varType,
 			Init: initExpr,
 		}, nil
 	}
+}
+
+// parseAssignmentTarget parses the left-hand side of an assignment, which can be an identifier or a field access.
+// eg. "a", "a.b", "a.b.c" are all valid assignment targets.
+func (p *Parser) parseAssignmentTarget() (ast.Expr, error) {
+	tok := p.peek()
+	if tok.Type != token.Ident {
+		return nil, errors.New("expected assignment target")
+	}
+
+	p.advance()
+
+	var expr ast.Expr = &ast.IdentExpr{
+		Name:     tok.Literal,
+		NodeMeta: ast.NodeMeta{Line: tok.Line, Col: tok.Col},
+	}
+
+	// Keep parsing field accesses as long as we see dots.
+	// This allows for nested field accesses like "a.b.c".
+	for p.peek().Type == token.Dot {
+		nextExpr, err := p.parseFieldAccessSuffix(expr)
+		if err != nil {
+			return nil, err
+		}
+		expr = nextExpr
+	}
+
+	return expr, nil
 }
 
 func (p *Parser) parseExternFuncDecl() (*ast.ExternFuncStmt, error) {
@@ -485,6 +624,11 @@ func (p *Parser) parseType() (*ast.TypeRef, error) {
 	case token.FloatKw:
 		p.advance()
 		return ast.TypeFloatRef, nil
+	case token.Ident:
+		// Custom struct type reference.
+		typeName := tok.Literal
+		p.advance()
+		return &ast.TypeRef{Kind: ast.TypeCustom, Name: typeName}, nil
 	default:
 		return nil, errors.New("unexpected token, expecting type")
 	}

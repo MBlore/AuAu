@@ -37,6 +37,8 @@ func TokenTypeToString(t token.TokenType) string {
 
 func TypeKindToString(t TypeKind) string {
 	switch t {
+	case TypeCustom:
+		return "custom"
 	case TypeInt64:
 		return "int64"
 	case TypeVoid:
@@ -80,6 +82,10 @@ func TypeKindToString(t TypeKind) string {
 func TypeToString(t *TypeRef) string {
 	if t == nil {
 		return "nil"
+	}
+
+	if t.Kind == TypeCustom {
+		return t.Name
 	}
 
 	return TypeKindToString(t.Kind)

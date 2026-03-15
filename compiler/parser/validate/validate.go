@@ -207,9 +207,15 @@ func checkAssignStmtsInBlock(ctx *validateContext, block *ast.BlockStmt, scope m
 			localScope[s.Name] = s.Type
 
 		case *ast.AssignStmt:
-			varType, ok := localScope[s.Name]
+			name, ok := assignmentTargetBaseName(s.Target)
 			if !ok {
-				ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+s.Name)
+				ctx.addError(s.NodeMeta, "invalid assignment target")
+				continue
+			}
+
+			varType, ok := localScope[name]
+			if !ok {
+				ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+name)
 				continue
 			}
 
@@ -274,13 +280,30 @@ func checkNestedStmtForAssignStmts(ctx *validateContext, stmt ast.Stmt, scope ma
 		scope[s.Name] = s.Type
 
 	case *ast.AssignStmt:
-		varType, ok := scope[s.Name]
+		name, ok := assignmentTargetBaseName(s.Target)
 		if !ok {
-			ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+s.Name)
+			ctx.addError(s.NodeMeta, "invalid assignment target")
+			return
+		}
+
+		varType, ok := scope[name]
+		if !ok {
+			ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+name)
 			return
 		}
 
 		validateAssignExprType(ctx, scope, varType, s.Value)
+	}
+}
+
+func assignmentTargetBaseName(target ast.Expr) (string, bool) {
+	switch t := target.(type) {
+	case *ast.IdentExpr:
+		return t.Name, true
+	case *ast.FieldAccessExpr:
+		return assignmentTargetBaseName(t.Base)
+	default:
+		return "", false
 	}
 }
 
