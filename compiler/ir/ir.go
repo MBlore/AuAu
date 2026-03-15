@@ -845,6 +845,48 @@ func (l *LoweringContext) emitAddress(expr ast.Expr) (IRValue, Type, error) {
 		return 0, Type{}, fmt.Errorf("struct type %s has no field named %s", baseType.Name, e.Field)
 
 	default:
-		return 0, Type{}, fmt.Errorf("expression is not addressable: %T", expr)
+		// For other expression types, we can only take their address if they are struct-typed and we can emit them as a value.
+		valueType, err := l.exprType(expr)
+		if err != nil {
+			return 0, Type{}, fmt.Errorf("expression is not addressable: %w", err)
+		}
+
+		if !valueType.IsStruct() {
+			return 0, Type{}, fmt.Errorf("expression is not addressable: %T", expr)
+		}
+
+		val, err := l.emitExpr(expr)
+		if err != nil {
+			return 0, Type{}, err
+		}
+
+		// To take the address of a struct-typed expression, we need to emit it as a value
+		// and then store it to a temporary on the stack so we can return its address.
+		tmpAddr := l.builder.Alloc(valueType)
+		l.builder.Store(tmpAddr, val)
+
+		return tmpAddr, valueType, nil
+	}
+}
+
+// exprType determines the IR type of an expression by looking at its AST node and using the context to resolve variable types and function return types.
+func (l *LoweringContext) exprType(expr ast.Expr) (Type, error) {
+	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		v, ok := l.lookupVar(e.Name)
+		if !ok {
+			return Type{}, fmt.Errorf("undefined variable: %s", e.Name)
+		}
+		return v.typ, nil
+
+	case *ast.CallExpr:
+		sig, ok := l.funcs[e.FuncName]
+		if !ok {
+			return Type{}, fmt.Errorf("unknown function: %s", e.FuncName)
+		}
+		return sig.ret, nil
+
+	default:
+		return Type{}, fmt.Errorf("cannot determine expression type for %T", expr)
 	}
 }

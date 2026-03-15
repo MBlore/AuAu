@@ -337,6 +337,9 @@ func resolveExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expr a
 
 		ctx.addError(e.NodeMeta, "struct "+baseType.Name+" has no field "+e.Field)
 		return nil
+	case *ast.CallExpr:
+		return validateCallExpr(ctx, scope, e)
+
 	default:
 		ctx.addError(ast.NodeMeta{}, "invalid assignment target")
 		return nil

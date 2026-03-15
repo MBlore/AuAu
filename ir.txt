@@ -11,6 +11,12 @@ block0:
   t7:struct C {value: i64} = load t6
   t8:i64 = call test(t7)
   print t8
+  t9:struct C {value: i64} = call buildStr()
+  t10:ptr<struct C {value: i64}> = alloc
+  store t10, t9
+  t11:ptr<i64> = fieldaddr t10, 0
+  t12:i64 = load t11
+  print t12
   ret
 func test:
 block0:
@@ -20,3 +26,13 @@ block0:
   t2:ptr<i64> = fieldaddr t0, 0
   t3:i64 = load t2
   ret t3
+func buildStr:
+block0:
+  t0:ptr<struct C {value: i64}> = param 0
+  t1:ptr<struct C {value: i64}> = alloc
+  t2:ptr<i64> = fieldaddr t1, 0
+  t3:i64 = const 12
+  store t2, t3
+  t4:struct C {value: i64} = load t1
+  store t0, t4
+  ret
