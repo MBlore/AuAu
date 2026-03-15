@@ -6,6 +6,7 @@ import (
 
 	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/lexer"
+	"github.com/MBlore/AuAu/parser/validate"
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -384,5 +385,93 @@ func TestNestedStructs(t *testing.T) {
 
 	if len(pr.Errors) != 0 {
 		t.Fatalf("Expected 0 parser errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+}
+
+func TestDuplicateStructNamesFailValidation(t *testing.T) {
+	input := `package main
+	struct Point {
+		x int
+	}
+
+	struct Point {
+		y int
+	}
+`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 lexer errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Fatalf("Expected 0 parse errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	validateErrors := validate.Validate(pr.File)
+	if len(validateErrors) != 1 {
+		t.Fatalf("Expected 1 validation error, got %d: %v", len(validateErrors), validateErrors)
+	}
+
+	if !strings.Contains(validateErrors[0].Error(), "duplicate struct name: Point") {
+		t.Fatalf("Expected duplicate struct error, got %v", validateErrors[0])
+	}
+}
+
+func TestUnknownCustomTypesFailValidation(t *testing.T) {
+	input := `package main
+	struct Point {
+		next Missing
+	}
+
+	extern void logPoint(Missing value)
+
+	Missing makePoint(Missing input) {
+		Missing local
+		return local
+	}
+`
+
+	lexer := lexer.NewLexer(input)
+	result := lexer.Lex()
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("Expected 0 lexer errors, got %d: %v", len(result.Errors), result.Errors)
+	}
+
+	parser := NewParser("test.auau", result.Tokens)
+	pr := parser.Parse()
+
+	if len(pr.Errors) != 0 {
+		t.Fatalf("Expected 0 parse errors, got %d: %v", len(pr.Errors), pr.Errors)
+	}
+
+	validateErrors := validate.Validate(pr.File)
+	if len(validateErrors) < 5 {
+		t.Fatalf("Expected at least 5 validation errors, got %d: %v", len(validateErrors), validateErrors)
+	}
+
+	allErrors := make([]string, 0, len(validateErrors))
+	for _, err := range validateErrors {
+		allErrors = append(allErrors, err.Error())
+	}
+
+	joined := strings.Join(allErrors, "\n")
+
+	for _, expected := range []string{
+		"unknown type in struct field Point.next: Missing",
+		"unknown parameter type for extern logPoint parameter value: Missing",
+		"unknown return type for function makePoint: Missing",
+		"unknown parameter type for function makePoint parameter input: Missing",
+		"unknown variable type for local: Missing",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("Expected error %q in %s", expected, joined)
+		}
 	}
 }

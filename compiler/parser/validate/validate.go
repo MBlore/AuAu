@@ -11,6 +11,7 @@ import (
 type validateContext struct {
 	file     *ast.File
 	varTypes map[string]*ast.TypeRef
+	structs  map[string]*ast.StructDecl
 	funcs    map[string]funcSig
 	errors   []error
 }
@@ -29,8 +30,15 @@ func Validate(file *ast.File) []error {
 	context := &validateContext{
 		file:     file,
 		varTypes: make(map[string]*ast.TypeRef),
+		structs:  make(map[string]*ast.StructDecl),
 		funcs:    make(map[string]funcSig),
 		errors:   []error{},
+	}
+
+	for _, s := range file.Structs {
+		if _, exists := context.structs[s.Name]; !exists {
+			context.structs[s.Name] = s
+		}
 	}
 
 	for _, fn := range file.Functions {
@@ -65,8 +73,10 @@ func Validate(file *ast.File) []error {
 
 	ensurePackageDeclared(context)
 	ensureUniqueFunctionNames(context)
+	ensureUniqueStructNames(context)
 	ensureUniqueVariableNamesPerBlock(context)
 	ensureUniqueExternFuncNames(context)
+	ensureKnownCustomTypes(context)
 	ensureNoVoidVariables(context)
 	inferConstantTypes(context)
 
@@ -207,19 +217,12 @@ func checkAssignStmtsInBlock(ctx *validateContext, block *ast.BlockStmt, scope m
 			localScope[s.Name] = s.Type
 
 		case *ast.AssignStmt:
-			name, ok := assignmentTargetBaseName(s.Target)
-			if !ok {
-				ctx.addError(s.NodeMeta, "invalid assignment target")
+			targetType := resolveExprType(ctx, localScope, s.Target)
+			if targetType == nil {
 				continue
 			}
 
-			varType, ok := localScope[name]
-			if !ok {
-				ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+name)
-				continue
-			}
-
-			validateAssignExprType(ctx, localScope, varType, s.Value)
+			validateAssignExprType(ctx, localScope, targetType, s.Value)
 
 		case *ast.BlockStmt:
 			checkAssignStmtsInBlock(ctx, s, localScope)
@@ -280,19 +283,12 @@ func checkNestedStmtForAssignStmts(ctx *validateContext, stmt ast.Stmt, scope ma
 		scope[s.Name] = s.Type
 
 	case *ast.AssignStmt:
-		name, ok := assignmentTargetBaseName(s.Target)
-		if !ok {
-			ctx.addError(s.NodeMeta, "invalid assignment target")
+		targetType := resolveExprType(ctx, scope, s.Target)
+		if targetType == nil {
 			return
 		}
 
-		varType, ok := scope[name]
-		if !ok {
-			ctx.addError(s.NodeMeta, "assignment to undeclared variable: "+name)
-			return
-		}
-
-		validateAssignExprType(ctx, scope, varType, s.Value)
+		validateAssignExprType(ctx, scope, targetType, s.Value)
 	}
 }
 
@@ -305,6 +301,62 @@ func assignmentTargetBaseName(target ast.Expr) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func resolveExprType(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
+	switch e := expr.(type) {
+	case *ast.IdentExpr:
+		declType, ok := lookupType(scope, ctx, e.Name)
+		if !ok {
+			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
+			return nil
+		}
+		return declType
+	case *ast.FieldAccessExpr:
+		baseType := resolveExprType(ctx, scope, e.Base)
+		if baseType == nil {
+			return nil
+		}
+
+		if baseType.Kind != ast.TypeCustom {
+			ctx.addError(e.NodeMeta, "field access requires struct type, got "+ast.TypeToString(baseType))
+			return nil
+		}
+
+		structDecl, ok := ctx.structs[baseType.Name]
+		if !ok {
+			ctx.addError(e.NodeMeta, "unknown struct type: "+baseType.Name)
+			return nil
+		}
+
+		for _, field := range structDecl.Fields {
+			if field.Name == e.Field {
+				return field.Type
+			}
+		}
+
+		ctx.addError(e.NodeMeta, "struct "+baseType.Name+" has no field "+e.Field)
+		return nil
+	default:
+		ctx.addError(ast.NodeMeta{}, "invalid assignment target")
+		return nil
+	}
+}
+
+func sameType(a *ast.TypeRef, b *ast.TypeRef) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+
+	if a.Kind != b.Kind {
+		return false
+	}
+
+	if a.Kind == ast.TypeCustom {
+		return a.Name == b.Name
+	}
+
+	return true
 }
 
 func cloneTypeScope(scope map[string]*ast.TypeRef) map[string]*ast.TypeRef {
@@ -371,7 +423,7 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 			return
 		}
 
-		if retType.Kind != expectedType.Kind {
+		if !sameType(retType, expectedType) {
 			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign "+ast.TypeToString(retType)+" to "+ast.TypeToString(expectedType))
 		}
 	case *ast.StringLiteralExpr:
@@ -423,13 +475,20 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 
 		e.InferredType = expectedType
 	case *ast.IdentExpr:
-		declType, ok := lookupType(scope, ctx, e.Name)
-		if !ok {
-			ctx.addError(e.NodeMeta, "undefined variable: "+e.Name)
+		declType := resolveExprType(ctx, scope, e)
+		if declType == nil {
 			return
 		}
-		if declType.Kind != expectedType.Kind {
+		if !sameType(declType, expectedType) {
 			ctx.addError(e.NodeMeta, "type mismatch in assignment to "+e.Name+": cannot assign "+ast.TypeToString(declType)+" to "+ast.TypeToString(expectedType))
+		}
+	case *ast.FieldAccessExpr:
+		fieldType := resolveExprType(ctx, scope, e)
+		if fieldType == nil {
+			return
+		}
+		if !sameType(fieldType, expectedType) {
+			ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign "+ast.TypeToString(fieldType)+" to "+ast.TypeToString(expectedType))
 		}
 	case *ast.BinaryExpr:
 		switch e.Op {
@@ -444,7 +503,7 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 				ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign bool to "+ast.TypeToString(expectedType))
 			}
 
-			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+			operandType := inferComparisonOperandTypeForScope(ctx, scope, e.Left, e.Right)
 
 			validateAssignExprType(ctx, scope, operandType, e.Left)
 			validateAssignExprType(ctx, scope, operandType, e.Right)
@@ -456,7 +515,7 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 				ctx.addError(e.NodeMeta, "type mismatch in assignment: cannot assign bool to "+ast.TypeToString(expectedType))
 			}
 
-			operandType := inferComparisonOperandTypeForScope(scope, e.Left, e.Right)
+			operandType := inferComparisonOperandTypeForScope(ctx, scope, e.Left, e.Right)
 
 			if !isIntegerType(operandType) && !isFloatType(operandType) {
 				ctx.addError(e.NodeMeta, "operator "+ast.TokenTypeToString(e.Op)+" requires integer or float operands")
@@ -471,12 +530,12 @@ func validateAssignExprType(ctx *validateContext, scope map[string]*ast.TypeRef,
 	}
 }
 
-func inferComparisonOperandTypeForScope(scope map[string]*ast.TypeRef, left, right ast.Expr) *ast.TypeRef {
-	if t := exprKnownTypeForScope(scope, left); t != nil {
+func inferComparisonOperandTypeForScope(ctx *validateContext, scope map[string]*ast.TypeRef, left, right ast.Expr) *ast.TypeRef {
+	if t := exprKnownTypeForScope(ctx, scope, left); t != nil {
 		return t
 	}
 
-	if t := exprKnownTypeForScope(scope, right); t != nil {
+	if t := exprKnownTypeForScope(ctx, scope, right); t != nil {
 		return t
 	}
 
@@ -492,10 +551,12 @@ func inferComparisonOperandTypeForScope(scope map[string]*ast.TypeRef, left, rig
 
 // exprKnownTypeForScope checks if the expression is a literal or identifier with a known type in the current scope, and returns that type if so.
 // This is used to help infer the type of comparison expressions when validating assignments, e.g. in 'x = 5 < 3.2'.
-func exprKnownTypeForScope(scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
+func exprKnownTypeForScope(ctx *validateContext, scope map[string]*ast.TypeRef, expr ast.Expr) *ast.TypeRef {
 	switch e := expr.(type) {
 	case *ast.IdentExpr:
 		return scope[e.Name]
+	case *ast.FieldAccessExpr:
+		return resolveExprType(ctx, scope, e)
 	case *ast.IntLiteralExpr:
 		return e.InferredType
 	case *ast.UnaryExpr:
