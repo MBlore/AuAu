@@ -1,6 +1,10 @@
 package ast
 
-import "github.com/MBlore/AuAu/token"
+import (
+	"fmt"
+
+	"github.com/MBlore/AuAu/token"
+)
 
 // This package contains the AST model of the language.
 
@@ -63,6 +67,19 @@ type File struct {
 	Functions []*FuncDecl
 	Externs   []*ExternFuncStmt
 	Structs   []*StructDecl
+}
+
+func (f *File) Merge(other *File) error {
+	// If the package names don't match, we can't merge.
+	if f.PackageName != other.PackageName {
+		return fmt.Errorf("package name	must be: %s", f.PackageName)
+	}
+
+	f.Functions = append(f.Functions, other.Functions...)
+	f.Externs = append(f.Externs, other.Externs...)
+	f.Structs = append(f.Structs, other.Structs...)
+
+	return nil
 }
 
 type Comment struct {

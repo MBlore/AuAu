@@ -1,0 +1,14 @@
+package main
+
+struct C {
+	value int
+}
+
+struct B {
+	c C
+}
+
+struct A {
+	b B
+}
+

@@ -1,0 +1,19 @@
+package main
+
+void main() {
+	A a
+	a.b.c.value = 42
+	print(test(a.b.c))
+	
+	print(buildStr().value)
+}
+
+int test(C a) {
+	return a.value
+}
+
+C buildStr() {
+	C test
+	test.value = 18
+	return test
+}

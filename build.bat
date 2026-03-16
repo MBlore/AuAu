@@ -30,7 +30,8 @@ if %ERRORLEVEL% neq 0 (
 )
 
 REM Compile test source file.
-AuAu.exe build test.au
+REM AuAu.exe build test.au
+AuAu.exe build ./testsrc
 
 REM Check if the compilation was successful.
 if %ERRORLEVEL% neq 0 (
