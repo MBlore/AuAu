@@ -90,6 +90,7 @@ func buildFolder(folderPath string) {
 				return
 			}
 
+			// Lex and save tokens to file.
 			lx := lexer.NewLexer(string(source))
 			lexResult := lx.Lex()
 			if len(lexResult.Errors) > 0 {
@@ -99,12 +100,29 @@ func buildFolder(folderPath string) {
 				return
 			}
 
+			tokStr := token.PrintTokens(lexResult.Tokens)
+
+			err = os.WriteFile(entry.Name()+".tokens", []byte(tokStr), 0644)
+			if err != nil {
+				fmt.Printf("Error writing tokens to file: %s\n", err)
+				return
+			}
+
+			// Parse and save AST to file.
 			parser := parser.NewParser(entry.Name(), lexResult.Tokens)
 			pr := parser.Parse()
 			if len(pr.Errors) > 0 {
 				for _, err := range pr.Errors {
 					fmt.Println(colorize("error ", ansiRed) + err.Error())
 				}
+				return
+			}
+
+			astPrint := ast.NewAstPrinter(pr.File)
+			astStr := astPrint.Print()
+			err = os.WriteFile(entry.Name()+".ast", []byte(astStr), 0644)
+			if err != nil {
+				fmt.Printf("Error writing AST to file: %s\n", err)
 				return
 			}
 
@@ -119,6 +137,7 @@ func buildFolder(folderPath string) {
 	compileAst(mergedAst)
 }
 
+// buildFile compiles a single source file.
 func buildFile(filename string) {
 	// File must exist.
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
@@ -153,7 +172,7 @@ func buildFile(filename string) {
 	// Print the tokens.
 	tokStr := token.PrintTokens(lexResult.Tokens)
 
-	err = os.WriteFile("tokens.txt", []byte(tokStr), 0644)
+	err = os.WriteFile(filename+".tokens", []byte(tokStr), 0644)
 	if err != nil {
 		fmt.Printf("Error writing tokens to file: %s\n", err)
 		return
@@ -175,7 +194,7 @@ func buildFile(filename string) {
 	astPrint := ast.NewAstPrinter(pr.File)
 	astStr := astPrint.Print()
 
-	err = os.WriteFile("ast.txt", []byte(astStr), 0644)
+	err = os.WriteFile(filename+".ast", []byte(astStr), 0644)
 	if err != nil {
 		fmt.Printf("Error writing AST to file: %s\n", err)
 		return
@@ -199,6 +218,12 @@ func compileAst(f *ast.File) {
 	irProgram, err := ir.CompileFile(f)
 	if err != nil {
 		fmt.Printf("Error lowering to IR: %s\n", err)
+		return
+	}
+
+	err = os.WriteFile("out.ir", []byte(irProgram.String()), 0644)
+	if err != nil {
+		fmt.Printf("Error writing IR to file: %s\n", err)
 		return
 	}
 
