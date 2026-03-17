@@ -35,6 +35,7 @@ func Validate(file *ast.File) []error {
 		errors:   []error{},
 	}
 
+	// Copy AST info into the context for easy lookup by names during validation.
 	for _, s := range file.Structs {
 		if _, exists := context.structs[s.Name]; !exists {
 			context.structs[s.Name] = s
@@ -289,17 +290,6 @@ func checkNestedStmtForAssignStmts(ctx *validateContext, stmt ast.Stmt, scope ma
 		}
 
 		validateAssignExprType(ctx, scope, targetType, s.Value)
-	}
-}
-
-func assignmentTargetBaseName(target ast.Expr) (string, bool) {
-	switch t := target.(type) {
-	case *ast.IdentExpr:
-		return t.Name, true
-	case *ast.FieldAccessExpr:
-		return assignmentTargetBaseName(t.Base)
-	default:
-		return "", false
 	}
 }
 

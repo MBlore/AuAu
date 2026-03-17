@@ -11,4 +11,3 @@ struct B {
 struct A {
 	b B
 }
-
