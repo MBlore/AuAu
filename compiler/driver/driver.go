@@ -3,6 +3,7 @@ package driver
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/MBlore/AuAu/ast"
 	"github.com/MBlore/AuAu/backend/nasm/x64"
@@ -19,6 +20,7 @@ const (
 	ansiLightBlue = "\x1b[94m"
 	ansiGreen     = "\x1b[32m"
 	ansiRed       = "\x1b[31m"
+	ansiYellow    = "\x1b[33m"
 )
 
 // colorize wraps text with one ANSI color code and a trailing reset code.
@@ -74,7 +76,17 @@ func buildFolder(folderPath string) {
 		return
 	}
 
-	mergedAst := &ast.File{PackageName: "main"}
+	absFolderPath, err := filepath.Abs(folderPath)
+	if err != nil {
+		fmt.Printf("Error getting absolute path: %s\n", err)
+		return
+	}
+
+	mergedAst := &ast.File{
+		ModulePath:  absFolderPath,
+		ModuleName:  "main",
+		PackageName: "main",
+	}
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -82,6 +94,9 @@ func buildFolder(folderPath string) {
 		}
 
 		if entry.Name()[len(entry.Name())-3:] == ".au" {
+
+			diagnostics.SetSourceFile(folderPath + "/" + entry.Name())
+
 			// For every source file we find, we part in to AST, and merge it with a global AST,
 			// that we'll use to do a single build.
 			source, err := os.ReadFile(folderPath + "/" + entry.Name())
@@ -134,7 +149,11 @@ func buildFolder(folderPath string) {
 		}
 	}
 
-	compileAst(mergedAst)
+	err = resolveImports(mergedAst)
+	if err != nil {
+		fmt.Printf("Error resolving imports: %s\n", err)
+		return
+	}
 }
 
 // buildFile compiles a single source file.
@@ -145,9 +164,24 @@ func buildFile(filename string) {
 		return
 	}
 
-	diagnostics.SetSourceFile(filename)
+	// Load module config.
+	modConfig, err := loadModuleConfig(filepath.Dir(filename))
+	if err != nil {
+		fmt.Printf("Error loading module config: %s\n", err)
+		return
+	}
 
-	fmt.Printf("Compiling %s...\n", filename)
+	// Get full path of the filename.
+	fullPath, err := filepath.Abs(filename)
+	if err != nil {
+		fmt.Printf("Error getting full path: %s\n", err)
+		return
+	}
+
+	fileBase := filepath.Base(fullPath)
+	diagnostics.SetSourceFile(fileBase)
+
+	fmt.Printf("Compiling %s...\n", fileBase)
 
 	// Load source code from file.
 	source, err := os.ReadFile(filename)
@@ -190,6 +224,10 @@ func buildFile(filename string) {
 		return
 	}
 
+	// Set the path properties.
+	pr.File.ModulePath = filepath.Dir(fullPath)
+	pr.File.ModuleName = modConfig.Name
+
 	// Print the AST to file.
 	astPrint := ast.NewAstPrinter(pr.File)
 	astStr := astPrint.Print()
@@ -200,7 +238,11 @@ func buildFile(filename string) {
 		return
 	}
 
-	compileAst(pr.File)
+	err = resolveImports(pr.File)
+	if err != nil {
+		fmt.Printf("Error resolving imports: %s\n", err)
+		return
+	}
 }
 
 // compileAst takes a fully parsed AST, validates it and compiles it all the way down to assembly.

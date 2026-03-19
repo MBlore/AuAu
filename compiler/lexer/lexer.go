@@ -71,7 +71,7 @@ func (l *Lexer) nextToken() (token.Token, error) {
 		return token.Token{Type: token.EOF}, nil
 	}
 
-	startLine := l.line
+	startLine := l.line + 1
 	startCol := l.col
 
 	switch ch {

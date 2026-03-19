@@ -1,3 +1,3 @@
 {
-    "name": "github.com/mblore/auau",
+    "name": "github.com/mblore/auau"
 }

@@ -44,6 +44,21 @@ func (p *Parser) Parse() ParseResult {
 		return ParseResult{Errors: p.errors}
 	}
 
+	// Imports next.
+	imports := []*ast.ImportDecl{}
+	for p.peek().Type == token.Import {
+		importDecl := &ast.ImportDecl{}
+
+		p.advance() // consume 'import' keyword.
+		importPathTok, err := p.expect(token.String)
+		if err != nil {
+			p.addError(importPathTok, errors.New("expected import path string after 'import' keyword, e.g. 'import \"my/package\"'"))
+			return ParseResult{Errors: p.errors}
+		}
+		importDecl.PackageName = importPathTok.Literal
+		imports = append(imports, importDecl)
+	}
+
 	funcs := []*ast.FuncDecl{}
 	externs := []*ast.ExternFuncStmt{}
 	structs := []*ast.StructDecl{}
@@ -89,6 +104,7 @@ func (p *Parser) Parse() ParseResult {
 		Functions:   funcs,
 		Externs:     externs,
 		Structs:     structs,
+		Imports:     imports,
 	}
 
 	return ParseResult{File: &sourceFile, Errors: p.errors}

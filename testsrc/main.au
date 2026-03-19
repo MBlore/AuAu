@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 void main() {
 	A a
 	a.b.c.value = 42

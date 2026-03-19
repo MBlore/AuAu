@@ -1,8 +1,6 @@
 package ast
 
 import (
-	"fmt"
-
 	"github.com/MBlore/AuAu/token"
 )
 
@@ -62,22 +60,21 @@ var (
 
 // File is a collection of parsed source code for a single source file.
 type File struct {
-	PackageName string
+	ModulePath  string // The absolute path to the source file on disk.
+	ModuleName  string // The full module path starting from the au.mod file.
+	PackageName string // The package name as declared in the source file.
 
 	Functions []*FuncDecl
 	Externs   []*ExternFuncStmt
 	Structs   []*StructDecl
+	Imports   []*ImportDecl
 }
 
 func (f *File) Merge(other *File) error {
-	// If the package names don't match, we can't merge.
-	if f.PackageName != other.PackageName {
-		return fmt.Errorf("package name	must be: %s", f.PackageName)
-	}
-
 	f.Functions = append(f.Functions, other.Functions...)
 	f.Externs = append(f.Externs, other.Externs...)
 	f.Structs = append(f.Structs, other.Structs...)
+	f.Imports = append(f.Imports, other.Imports...)
 
 	return nil
 }
@@ -295,3 +292,10 @@ type FieldAccessExpr struct {
 }
 
 func (*FieldAccessExpr) isExpr() {}
+
+type ImportDecl struct {
+	NodeMeta
+	PackageName string
+}
+
+func (*ImportDecl) isStmt() {}

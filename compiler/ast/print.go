@@ -155,6 +155,8 @@ func (p *AstPrinter) printStmt(stmt Stmt) {
 		fmt.Fprintf(&p.buff, "%sBreakStmt\n", p.prefix())
 	case *ContinueStmt:
 		fmt.Fprintf(&p.buff, "%sContinueStmt\n", p.prefix())
+	case *ImportDecl:
+		fmt.Fprintf(&p.buff, "%sImportDecl %s\n", p.prefix(), s.PackageName)
 	}
 }
 
